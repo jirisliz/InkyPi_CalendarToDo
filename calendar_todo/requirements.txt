@@ -1,0 +1,13 @@
+# calendar_todo plugin dependencies
+# Install with: pip install -r requirements.txt
+
+# Core (always required)
+icalendar>=5.0.0
+recurring-ical-events>=2.1.0
+requests>=2.28.0
+Pillow>=9.0.0
+
+# Google Keep support (optional — only needed if todo_source = "keep")
+# pip install gkeepapi gpsoauth
+gkeepapi>=0.14.0
+gpsoauth>=1.0.0
