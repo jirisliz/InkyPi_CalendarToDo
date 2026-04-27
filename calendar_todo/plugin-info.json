@@ -1,0 +1,8 @@
+{
+  "id": "calendar_todo",
+  "name": "Calendar + Todo",
+  "description": "Landscape split-screen: monthly calendar (iCal/Google Calendar) on the left, todo list (Google Keep, Google Tasks, iCal VTODO, or manual) on the right.",
+  "version": "1.0.0",
+  "author": "",
+  "repository": ""
+}

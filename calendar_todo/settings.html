@@ -43,9 +43,9 @@
     <input type="password" class="form-control" name="keep_token"
            value="{{ settings.get('keep_token', '') }}">
     <small class="text-muted">
-      Generate once via gpsoauth — see
-      <a href="https://gkeepapi.readthedocs.io/" target="_blank">gkeepapi docs</a>.
-      Use an App Password if you have 2-Step Verification enabled.
+      Generate once via gpsoauth — see the plugin
+      <a href="https://github.com/kiwiz/gkeepapi" target="_blank">README</a>.
+      Use a Google App Password if you have 2-Step Verification enabled.
     </small>
   </div>
   <div class="mb-2">
@@ -53,7 +53,7 @@
     <input type="text" class="form-control" name="keep_note_title"
            value="{{ settings.get('keep_note_title', '') }}"
            placeholder="Shopping list">
-    <small class="text-muted">Leave blank to use the first pinned checklist.</small>
+    <small class="text-muted">Leave blank to use the first pinned checklist note.</small>
   </div>
 </div>
 
@@ -64,8 +64,10 @@
     <input type="password" class="form-control" name="tasks_api_key"
            value="{{ settings.get('tasks_api_key', '') }}">
     <small class="text-muted">
-      Enable the Tasks API in Google Cloud Console, create an OAuth2 credential,
-      and paste the bearer token here (or set <code>GOOGLE_TASKS_TOKEN</code> in your .env).
+      Enable the Tasks API in
+      <a href="https://console.cloud.google.com" target="_blank">Google Cloud Console</a>,
+      create an OAuth2 credential, and paste the bearer token here.
+      Alternatively set <code>GOOGLE_TASKS_TOKEN</code> in your InkyPi <code>.env</code> file.
     </small>
   </div>
   <div class="mb-2">
@@ -101,7 +103,7 @@
 
 <script>
   function updateFields() {
-    const v = document.getElementById('todo_source_select').value;
+    var v = document.getElementById('todo_source_select').value;
     document.getElementById('keep_fields').style.display   = v === 'keep'   ? '' : 'none';
     document.getElementById('tasks_fields').style.display  = v === 'tasks'  ? '' : 'none';
     document.getElementById('manual_fields').style.display = v === 'manual' ? '' : 'none';
