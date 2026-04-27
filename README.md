@@ -3,20 +3,8 @@
 Landscape split-screen plugin: **monthly calendar on the left** (iCal / Google Calendar),
 **todo list on the right** (Google Keep, Google Tasks, iCal VTODO, or manual).
 
-```
-┌─────────────────────────┬──────────────┐
-│     April 2026          │  To-do       │
-│  Mo Tu We Th Fr Sa Su   │  ☐ Groceries │
-│         1  2  3  4  5   │  ☑ Report    │
-│   6  7  8  9 10 11 12   │  ☐ Dentist   │
-│  13 14 15 16 17 18 19   │  ☐ Auth bug  │
-│  20 21 22 23 24 25 26   │  ☐ Update CV │
-│  27 28 29 30            │              │
-└─────────────────────────┴──────────────┘
-       2/3 width                1/3 width
-```
+<img width="573" height="361" alt="image" src="https://github.com/user-attachments/assets/c7290e4b-9166-477a-b7cc-d7da1262631a" />
 
----
 
 ## Installation
 
