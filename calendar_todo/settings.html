@@ -1,113 +1,132 @@
 <div class="mb-3">
-  <label class="form-label fw-semibold">iCal URL</label>
-  <input type="url" class="form-control" name="ical_url"
-         value="{{ settings.get('ical_url', '') }}"
-         placeholder="https://calendar.google.com/calendar/ical/...">
-  <small class="text-muted">
-    Google Calendar → Settings → your calendar → <em>Secret address in iCal format</em>.<br>
-    Works with Outlook, Apple Calendar, and any standard .ics feed.
-  </small>
+    <label class="form-label fw-semibold">iCal URL</label>
+    <input type="url" class="form-control" id="ical_url" name="ical_url"
+           placeholder="https://calendar.google.com/calendar/ical/...">
+    <small class="text-muted">
+        Google Calendar → Settings → your calendar → <em>Secret address in iCal format</em>.
+        Works with Outlook, Apple Calendar, and any standard .ics feed.
+    </small>
 </div>
 
 <div class="mb-3">
-  <label class="form-label fw-semibold">Calendar / Todo split</label>
-  <select class="form-select" name="split_ratio">
-    <option value="0.67" {% if settings.get('split_ratio','0.67')=='0.67' %}selected{% endif %}>Calendar 2/3 · Todo 1/3</option>
-    <option value="0.75" {% if settings.get('split_ratio','0.67')=='0.75' %}selected{% endif %}>Calendar 3/4 · Todo 1/4</option>
-    <option value="0.50" {% if settings.get('split_ratio','0.67')=='0.50' %}selected{% endif %}>Calendar 1/2 · Todo 1/2</option>
-  </select>
+    <label class="form-label fw-semibold">Calendar / Todo split</label>
+    <select class="form-select" id="split_ratio" name="split_ratio">
+        <option value="0.67">Calendar 2/3 · Todo 1/3</option>
+        <option value="0.75">Calendar 3/4 · Todo 1/4</option>
+        <option value="0.50">Calendar 1/2 · Todo 1/2</option>
+    </select>
 </div>
 
 <hr>
 <h6 class="mb-3">Todo source</h6>
 
 <div class="mb-3">
-  <select class="form-select" name="todo_source" id="todo_source_select">
-    <option value="ical"   {% if settings.get('todo_source','ical')=='ical'   %}selected{% endif %}>From same iCal (VTODO)</option>
-    <option value="keep"   {% if settings.get('todo_source','ical')=='keep'   %}selected{% endif %}>Google Keep (gkeepapi)</option>
-    <option value="tasks"  {% if settings.get('todo_source','ical')=='tasks'  %}selected{% endif %}>Google Tasks API</option>
-    <option value="manual" {% if settings.get('todo_source','ical')=='manual' %}selected{% endif %}>Manual list</option>
-  </select>
+    <select class="form-select" id="todo_source" name="todo_source">
+        <option value="ical">From same iCal (VTODO)</option>
+        <option value="keep">Google Keep (gkeepapi)</option>
+        <option value="tasks">Google Tasks API</option>
+        <option value="manual">Manual list</option>
+    </select>
 </div>
 
 <!-- Google Keep fields -->
 <div id="keep_fields" style="display:none">
-  <div class="mb-2">
-    <label class="form-label">Google account email</label>
-    <input type="email" class="form-control" name="keep_email"
-           value="{{ settings.get('keep_email', '') }}"
-           placeholder="you@gmail.com">
-  </div>
-  <div class="mb-2">
-    <label class="form-label">Master token</label>
-    <input type="password" class="form-control" name="keep_token"
-           value="{{ settings.get('keep_token', '') }}">
-    <small class="text-muted">
-      Generate once via gpsoauth — see the plugin
-      <a href="https://github.com/kiwiz/gkeepapi" target="_blank">README</a>.
-      Use a Google App Password if you have 2-Step Verification enabled.
-    </small>
-  </div>
-  <div class="mb-2">
-    <label class="form-label">Note title to use as todo list</label>
-    <input type="text" class="form-control" name="keep_note_title"
-           value="{{ settings.get('keep_note_title', '') }}"
-           placeholder="Shopping list">
-    <small class="text-muted">Leave blank to use the first pinned checklist note.</small>
-  </div>
+    <div class="mb-2">
+        <label class="form-label">Google account email</label>
+        <input type="email" class="form-control" id="keep_email" name="keep_email"
+               placeholder="you@gmail.com">
+    </div>
+    <div class="mb-2">
+        <label class="form-label">Master token</label>
+        <input type="password" class="form-control" id="keep_token" name="keep_token">
+        <small class="text-muted">
+            Generate once via gpsoauth — see README.
+            Use a Google App Password if you have 2-Step Verification enabled.
+        </small>
+    </div>
+    <div class="mb-2">
+        <label class="form-label">Note title to use as todo list</label>
+        <input type="text" class="form-control" id="keep_note_title" name="keep_note_title"
+               placeholder="Shopping list">
+        <small class="text-muted">Leave blank to use the first pinned checklist note.</small>
+    </div>
 </div>
 
 <!-- Google Tasks fields -->
 <div id="tasks_fields" style="display:none">
-  <div class="mb-2">
-    <label class="form-label">OAuth2 Bearer Token</label>
-    <input type="password" class="form-control" name="tasks_api_key"
-           value="{{ settings.get('tasks_api_key', '') }}">
-    <small class="text-muted">
-      Enable the Tasks API in
-      <a href="https://console.cloud.google.com" target="_blank">Google Cloud Console</a>,
-      create an OAuth2 credential, and paste the bearer token here.
-      Alternatively set <code>GOOGLE_TASKS_TOKEN</code> in your InkyPi <code>.env</code> file.
-    </small>
-  </div>
-  <div class="mb-2">
-    <label class="form-label">Task list ID</label>
-    <input type="text" class="form-control" name="tasks_list_id"
-           value="{{ settings.get('tasks_list_id', '@default') }}">
-    <small class="text-muted"><code>@default</code> uses your primary task list.</small>
-  </div>
+    <div class="mb-2">
+        <label class="form-label">OAuth2 Bearer Token</label>
+        <input type="password" class="form-control" id="tasks_api_key" name="tasks_api_key">
+        <small class="text-muted">
+            Enable the Tasks API in Google Cloud Console, create an OAuth2 credential,
+            and paste the bearer token here.
+            Alternatively set <code>GOOGLE_TASKS_TOKEN</code> in your InkyPi <code>.env</code> file.
+        </small>
+    </div>
+    <div class="mb-2">
+        <label class="form-label">Task list ID</label>
+        <input type="text" class="form-control" id="tasks_list_id" name="tasks_list_id"
+               placeholder="@default">
+        <small class="text-muted"><code>@default</code> uses your primary task list.</small>
+    </div>
 </div>
 
 <!-- Manual fields -->
 <div id="manual_fields" style="display:none">
-  <div class="mb-2">
-    <label class="form-label">Tasks (one per line)</label>
-    <textarea class="form-control" name="manual_todos" rows="6"
-              placeholder="Buy groceries&#10;Call dentist&#10;Fix the thing">{{ settings.get('manual_todos', '') }}</textarea>
-  </div>
+    <div class="mb-2">
+        <label class="form-label">Tasks (one per line)</label>
+        <textarea class="form-control" id="manual_todos" name="manual_todos" rows="6"
+                  placeholder="Buy groceries&#10;Call dentist&#10;Fix the thing"></textarea>
+    </div>
 </div>
 
 <hr>
 
 <div class="mb-3">
-  <label class="form-label fw-semibold">Max todo items shown</label>
-  <input type="number" class="form-control" name="num_todo_items"
-         value="{{ settings.get('num_todo_items', 8) }}" min="1" max="20">
+    <label class="form-label fw-semibold">Max todo items shown</label>
+    <input type="number" class="form-control" id="num_todo_items" name="num_todo_items"
+           value="8" min="1" max="20">
 </div>
 
 <div class="form-check mb-3">
-  <input class="form-check-input" type="checkbox" name="show_completed" value="true"
-         {% if settings.get('show_completed') %}checked{% endif %}>
-  <label class="form-check-label">Show completed tasks (with strikethrough)</label>
+    <input class="form-check-input" type="checkbox" id="show_completed" name="show_completed" value="true">
+    <label class="form-check-label" for="show_completed">Show completed tasks (with strikethrough)</label>
 </div>
 
 <script>
-  function updateFields() {
-    var v = document.getElementById('todo_source_select').value;
-    document.getElementById('keep_fields').style.display   = v === 'keep'   ? '' : 'none';
-    document.getElementById('tasks_fields').style.display  = v === 'tasks'  ? '' : 'none';
-    document.getElementById('manual_fields').style.display = v === 'manual' ? '' : 'none';
-  }
-  document.getElementById('todo_source_select').addEventListener('change', updateFields);
-  updateFields();
+    function updateTodoFields() {
+        var v = document.getElementById('todo_source').value;
+        document.getElementById('keep_fields').style.display   = v === 'keep'   ? '' : 'none';
+        document.getElementById('tasks_fields').style.display  = v === 'tasks'  ? '' : 'none';
+        document.getElementById('manual_fields').style.display = v === 'manual' ? '' : 'none';
+    }
+
+    document.getElementById('todo_source').addEventListener('change', updateTodoFields);
+
+    document.addEventListener('DOMContentLoaded', function() {
+        if (loadPluginSettings) {
+            document.getElementById('ical_url').value        = pluginSettings.ical_url        || '';
+            document.getElementById('num_todo_items').value  = pluginSettings.num_todo_items  || '8';
+            document.getElementById('keep_email').value      = pluginSettings.keep_email      || '';
+            document.getElementById('keep_token').value      = pluginSettings.keep_token      || '';
+            document.getElementById('keep_note_title').value = pluginSettings.keep_note_title || '';
+            document.getElementById('tasks_api_key').value   = pluginSettings.tasks_api_key   || '';
+            document.getElementById('tasks_list_id').value   = pluginSettings.tasks_list_id   || '@default';
+            document.getElementById('manual_todos').value    = pluginSettings.manual_todos    || '';
+
+            if (pluginSettings.show_completed === 'true' || pluginSettings.show_completed === true) {
+                document.getElementById('show_completed').checked = true;
+            }
+
+            if (pluginSettings.split_ratio) {
+                document.getElementById('split_ratio').value = pluginSettings.split_ratio;
+            }
+
+            if (pluginSettings.todo_source) {
+                document.getElementById('todo_source').value = pluginSettings.todo_source;
+            }
+        }
+
+        updateTodoFields();
+    });
 </script>

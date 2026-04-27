@@ -29,7 +29,8 @@ class CalendarTodoPlugin(BasePlugin):
         # --- Settings ---
         ical_url        = settings.get("ical_url", "").strip()
         todo_source     = settings.get("todo_source", "ical")
-        show_completed  = settings.get("show_completed", False)
+        # show_completed comes from a checkbox — value is the string "true" when checked, absent when not
+        show_completed  = settings.get("show_completed", "false") in (True, "true", "True", "1")
         num_todo_items  = int(settings.get("num_todo_items", 8))
         keep_note_title = settings.get("keep_note_title", "").strip()
         keep_token      = settings.get("keep_token", "").strip()
@@ -368,7 +369,4 @@ class CalendarTodoPlugin(BasePlugin):
 
         return img
 
-    def generate_settings_template(self):
-        template_params = super().generate_settings_template()
-        template_params["todo_sources"] = ["ical", "keep", "tasks", "manual"]
-        return template_params
+
