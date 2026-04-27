@@ -11,7 +11,7 @@ from plugins.base_plugin.base_plugin import BasePlugin
 logger = logging.getLogger(__name__)
 
 
-class CalendarTodo(BasePlugin):
+class CalendarTodoPlugin(BasePlugin):
     """
     Landscape split-screen plugin for InkyPi.
     Calendar (iCal/Google Calendar) on the left, todo list on the right.
