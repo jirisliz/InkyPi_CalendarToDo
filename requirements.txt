@@ -1,0 +1,20 @@
+# calendar_todo plugin — Python dependencies
+# Install with:
+#   pip install -r requirements.txt
+#
+# InkyPi venv path (if needed):
+#   source /usr/local/inkypi/venv_inkypi/bin/activate
+#   pip install -r requirements.txt
+
+# --- Core (always required) ---
+icalendar>=5.0.0
+recurring-ical-events>=2.1.0
+requests>=2.28.0
+Pillow>=9.0.0
+
+# --- Google Keep (optional — only if todo_source = "keep") ---
+# pip install gkeepapi gpsoauth
+gkeepapi>=0.14.0
+gpsoauth>=1.0.0
+
+# --- Google Tasks uses only 'requests' (already listed above) ---

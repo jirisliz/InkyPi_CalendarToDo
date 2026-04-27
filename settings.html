@@ -1,0 +1,179 @@
+<div class="mb-3">
+    <label class="form-label fw-semibold">iCal URL</label>
+    <input type="url" class="form-control" id="ical_url" name="ical_url"
+           placeholder="https://calendar.google.com/calendar/ical/...">
+    <small class="text-muted">
+        Google Calendar → Settings → your calendar → <em>Secret address in iCal format</em>.
+        Works with Outlook, Apple Calendar, and any standard .ics feed.
+    </small>
+</div>
+
+<div class="row mb-3">
+    <div class="col">
+        <label class="form-label fw-semibold">Calendar style</label>
+        <select class="form-select" id="cal_style" name="cal_style">
+            <option value="grid">Monthly grid</option>
+            <option value="agenda">Agenda list (upcoming events)</option>
+        </select>
+    </div>
+    <div class="col" id="agenda_days_col" style="display:none">
+        <label class="form-label fw-semibold">Days ahead (agenda)</label>
+        <input type="number" class="form-control" id="agenda_days" name="agenda_days"
+               value="14" min="3" max="60">
+    </div>
+</div>
+
+<div class="row mb-3">
+    <div class="col">
+        <label class="form-label fw-semibold">Calendar / Todo split</label>
+        <select class="form-select" id="split_ratio" name="split_ratio">
+            <option value="0.67">Calendar 2/3 · Todo 1/3</option>
+            <option value="0.75">Calendar 3/4 · Todo 1/4</option>
+            <option value="0.50">Calendar 1/2 · Todo 1/2</option>
+        </select>
+    </div>
+    <div class="col">
+        <label class="form-label fw-semibold">Language</label>
+        <select class="form-select" id="language" name="language">
+            <option value="en">English</option>
+            <option value="cs">Čeština</option>
+        </select>
+    </div>
+</div>
+
+<div class="mb-3">
+    <label class="form-label fw-semibold">Font size</label>
+    <div class="d-flex align-items-center gap-3">
+        <input type="range" class="form-range flex-grow-1" id="font_size" name="font_size"
+               min="10" max="28" step="1" value="14"
+               oninput="document.getElementById('font_size_val').textContent = this.value + 'px'">
+        <span id="font_size_val" style="min-width:40px">14px</span>
+    </div>
+    <small class="text-muted">Affects both the calendar and todo panel. Default: 14px.</small>
+</div>
+
+<hr>
+<h6 class="mb-3">Todo source</h6>
+
+<div class="mb-3">
+    <select class="form-select" id="todo_source" name="todo_source">
+        <option value="ical">From same iCal (VTODO)</option>
+        <option value="keep">Google Keep (gkeepapi)</option>
+        <option value="tasks">Google Tasks API</option>
+        <option value="manual">Manual list</option>
+    </select>
+</div>
+
+<div id="keep_fields" style="display:none">
+    <div class="mb-2">
+        <label class="form-label">Google account email</label>
+        <input type="email" class="form-control" id="keep_email" name="keep_email"
+               placeholder="you@gmail.com">
+    </div>
+    <div class="mb-2">
+        <label class="form-label">Master token</label>
+        <input type="password" class="form-control" id="keep_token" name="keep_token">
+        <small class="text-muted">
+            Generate once via gpsoauth — see README.
+            Use a Google App Password if you have 2-Step Verification enabled.
+        </small>
+    </div>
+    <div class="mb-2">
+        <label class="form-label">Note title to use as todo list</label>
+        <input type="text" class="form-control" id="keep_note_title" name="keep_note_title"
+               placeholder="Shopping list">
+        <small class="text-muted">Leave blank to use the first pinned checklist note.</small>
+    </div>
+</div>
+
+<div id="tasks_fields" style="display:none">
+    <div class="mb-2">
+        <label class="form-label">OAuth2 Bearer Token</label>
+        <input type="password" class="form-control" id="tasks_api_key" name="tasks_api_key">
+        <small class="text-muted">
+            Enable the Tasks API in Google Cloud Console and paste the bearer token here,
+            or set <code>GOOGLE_TASKS_TOKEN</code> in your InkyPi <code>.env</code> file.
+        </small>
+    </div>
+    <div class="mb-2">
+        <label class="form-label">Task list ID</label>
+        <input type="text" class="form-control" id="tasks_list_id" name="tasks_list_id"
+               placeholder="@default">
+        <small class="text-muted"><code>@default</code> uses your primary task list.</small>
+    </div>
+</div>
+
+<div id="manual_fields" style="display:none">
+    <div class="mb-2">
+        <label class="form-label">Tasks (one per line)</label>
+        <textarea class="form-control" id="manual_todos" name="manual_todos" rows="6"
+                  placeholder="Buy groceries&#10;Call dentist&#10;Fix the thing"></textarea>
+    </div>
+</div>
+
+<hr>
+
+<div class="mb-3">
+    <label class="form-label fw-semibold">Max todo items shown</label>
+    <input type="number" class="form-control" id="num_todo_items" name="num_todo_items"
+           value="8" min="1" max="20">
+</div>
+
+<div class="form-check mb-3">
+    <input class="form-check-input" type="checkbox" id="show_completed" name="show_completed" value="true">
+    <label class="form-check-label" for="show_completed">Show completed tasks (with strikethrough)</label>
+</div>
+
+<script>
+    function updateTodoFields() {
+        var v = document.getElementById('todo_source').value;
+        document.getElementById('keep_fields').style.display   = v === 'keep'   ? '' : 'none';
+        document.getElementById('tasks_fields').style.display  = v === 'tasks'  ? '' : 'none';
+        document.getElementById('manual_fields').style.display = v === 'manual' ? '' : 'none';
+    }
+
+    function updateCalStyle() {
+        var v = document.getElementById('cal_style').value;
+        document.getElementById('agenda_days_col').style.display = v === 'agenda' ? '' : 'none';
+    }
+
+    document.getElementById('todo_source').addEventListener('change', updateTodoFields);
+    document.getElementById('cal_style').addEventListener('change', updateCalStyle);
+
+    document.addEventListener('DOMContentLoaded', function() {
+        if (loadPluginSettings) {
+            document.getElementById('ical_url').value        = pluginSettings.ical_url        || '';
+            document.getElementById('num_todo_items').value  = pluginSettings.num_todo_items  || '8';
+            document.getElementById('keep_email').value      = pluginSettings.keep_email      || '';
+            document.getElementById('keep_token').value      = pluginSettings.keep_token      || '';
+            document.getElementById('keep_note_title').value = pluginSettings.keep_note_title || '';
+            document.getElementById('tasks_api_key').value   = pluginSettings.tasks_api_key   || '';
+            document.getElementById('tasks_list_id').value   = pluginSettings.tasks_list_id   || '@default';
+            document.getElementById('manual_todos').value    = pluginSettings.manual_todos    || '';
+            document.getElementById('agenda_days').value     = pluginSettings.agenda_days     || '14';
+
+            var fs = pluginSettings.font_size || '14';
+            document.getElementById('font_size').value = fs;
+            document.getElementById('font_size_val').textContent = fs + 'px';
+
+            if (pluginSettings.show_completed === 'true' || pluginSettings.show_completed === true) {
+                document.getElementById('show_completed').checked = true;
+            }
+            if (pluginSettings.split_ratio) {
+                document.getElementById('split_ratio').value = pluginSettings.split_ratio;
+            }
+            if (pluginSettings.todo_source) {
+                document.getElementById('todo_source').value = pluginSettings.todo_source;
+            }
+            if (pluginSettings.cal_style) {
+                document.getElementById('cal_style').value = pluginSettings.cal_style;
+            }
+            if (pluginSettings.language) {
+                document.getElementById('language').value = pluginSettings.language;
+            }
+        }
+
+        updateTodoFields();
+        updateCalStyle();
+    });
+</script>
