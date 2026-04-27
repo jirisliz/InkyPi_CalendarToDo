@@ -10,26 +10,29 @@ from plugins.base_plugin.base_plugin import BasePlugin
 
 logger = logging.getLogger(__name__)
 
+DAY_NAMES_CS = ["Po", "Út", "St", "Čt", "Pá", "So", "Ne"]
+DAY_NAMES_EN = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"]
+MONTH_NAMES_CS = ["", "Leden", "Únor", "Březen", "Duben", "Květen", "Červen",
+                  "Červenec", "Srpen", "Září", "Říjen", "Listopad", "Prosinec"]
+DAY_SHORT_CS   = ["", "Po", "Út", "St", "Čt", "Pá", "So", "Ne"]
+
 
 class CalendarTodoPlugin(BasePlugin):
     """
     Landscape split-screen plugin for InkyPi.
-    Calendar (iCal/Google Calendar) on the left, todo list on the right.
-    Todo sources: iCal VTODO, Google Keep (gkeepapi), Google Tasks API, or manual.
+    Left panel: monthly grid OR agenda list of upcoming events.
+    Right panel: todo list (iCal VTODO / Google Keep / Google Tasks / manual).
     """
 
     def generate_image(self, settings, device_config):
         width, height = device_config.get_resolution()
 
-        # Split ratio (calendar takes the left portion)
-        ratio = float(settings.get("split_ratio", 0.67))
+        ratio          = float(settings.get("split_ratio", "0.67"))
         calendar_width = int(width * ratio)
-        todo_width = width - calendar_width
+        todo_width     = width - calendar_width
 
-        # --- Settings ---
         ical_url        = settings.get("ical_url", "").strip()
         todo_source     = settings.get("todo_source", "ical")
-        # show_completed comes from a checkbox — value is the string "true" when checked, absent when not
         show_completed  = settings.get("show_completed", "false") in (True, "true", "True", "1")
         num_todo_items  = int(settings.get("num_todo_items", 8))
         keep_note_title = settings.get("keep_note_title", "").strip()
@@ -38,6 +41,10 @@ class CalendarTodoPlugin(BasePlugin):
         tasks_api_key   = settings.get("tasks_api_key", "").strip()
         tasks_list_id   = settings.get("tasks_list_id", "@default")
         manual_todos    = settings.get("manual_todos", "")
+        cal_style       = settings.get("cal_style", "grid")          # "grid" or "agenda"
+        font_size       = int(settings.get("font_size", 14))
+        agenda_days     = int(settings.get("agenda_days", 14))       # days ahead for agenda view
+        language        = settings.get("language", "en")             # "en" or "cs"
 
         if not ical_url:
             raise RuntimeError(
@@ -45,45 +52,55 @@ class CalendarTodoPlugin(BasePlugin):
                 "In Google Calendar: Settings → your calendar → 'Secret address in iCal format'."
             )
 
-        # --- Fetch and parse calendar ---
-        cal_data = self._fetch_ical(ical_url)
-        today = date.today()
-        month_start = today.replace(day=1)
-        next_month  = (month_start.replace(day=28) + timedelta(days=4)).replace(day=1)
-        month_end   = next_month - timedelta(days=1)
-        events      = self._get_events(cal_data, month_start, month_end)
+        cal_data   = self._fetch_ical(ical_url)
+        today      = date.today()
 
-        # --- Fetch todos ---
+        if cal_style == "agenda":
+            # Agenda needs events from today forward
+            agenda_end = today + timedelta(days=agenda_days)
+            events_raw = self._get_events_with_time(cal_data, today, agenda_end)
+        else:
+            # Grid needs the whole current month
+            month_start = today.replace(day=1)
+            next_month  = (month_start.replace(day=28) + timedelta(days=4)).replace(day=1)
+            month_end   = next_month - timedelta(days=1)
+            events      = self._get_events(cal_data, month_start, month_end)
+
+        # --- Todos ---
         if todo_source == "keep":
-            todos = self._get_keep_todos(
-                keep_email, keep_token, keep_note_title, show_completed, num_todo_items
-            )
+            todos = self._get_keep_todos(keep_email, keep_token, keep_note_title,
+                                         show_completed, num_todo_items)
         elif todo_source == "tasks":
-            todos = self._get_google_tasks(
-                tasks_api_key, tasks_list_id, show_completed, num_todo_items
-            )
+            todos = self._get_google_tasks(tasks_api_key, tasks_list_id,
+                                           show_completed, num_todo_items)
         elif todo_source == "ical":
             todos = self._get_ical_todos(cal_data, show_completed, num_todo_items)
-        else:  # manual
+        else:
             todos = [
                 {"summary": t.strip(), "completed": False}
                 for t in manual_todos.splitlines() if t.strip()
             ][:num_todo_items]
 
-        # --- Compose final image ---
-        img      = Image.new("RGB", (width, height), "white")
-        cal_img  = self._render_calendar(
-            calendar_width, height, today, month_start, month_end, events
-        )
-        todo_img = self._render_todos(todo_width, height, todos)
+        # --- Render ---
+        img = Image.new("RGB", (width, height), "white")
+
+        if cal_style == "agenda":
+            cal_img = self._render_agenda(
+                calendar_width, height, today, events_raw, font_size, language
+            )
+        else:
+            cal_img = self._render_calendar(
+                calendar_width, height, today, month_start, month_end, events,
+                font_size, language
+            )
+
+        todo_img = self._render_todos(todo_width, height, todos, font_size)
 
         img.paste(cal_img,  (0, 0))
         img.paste(todo_img, (calendar_width, 0))
 
-        # Vertical divider line
         draw = ImageDraw.Draw(img)
         draw.line([(calendar_width, 0), (calendar_width, height)], fill="black", width=2)
-
         return img
 
     # ------------------------------------------------------------------
@@ -99,21 +116,58 @@ class CalendarTodoPlugin(BasePlugin):
             raise RuntimeError(f"Failed to fetch calendar: {e}")
 
     def _get_events(self, cal, start, end):
+        """Return dict {date: [summary, ...]} for the grid view."""
         try:
             raw = recurring_ical_events.of(cal).between(
                 datetime(start.year, start.month, start.day),
-                datetime(end.year,  end.month,   end.day, 23, 59, 59),
+                datetime(end.year, end.month, end.day, 23, 59, 59),
             )
         except Exception as e:
-            logger.warning(f"Recurring events expansion error: {e}")
+            logger.warning(f"Recurring events error: {e}")
             raw = []
-
         events = {}
         for c in raw:
             if c.name == "VEVENT":
                 dt = c.get("DTSTART").dt
                 d  = dt.date() if isinstance(dt, datetime) else dt
                 events.setdefault(d, []).append(str(c.get("SUMMARY", "")))
+        return events
+
+    def _get_events_with_time(self, cal, start, end):
+        """Return list of dicts sorted by date+time for agenda view."""
+        try:
+            raw = recurring_ical_events.of(cal).between(
+                datetime(start.year, start.month, start.day),
+                datetime(end.year, end.month, end.day, 23, 59, 59),
+            )
+        except Exception as e:
+            logger.warning(f"Recurring events error: {e}")
+            raw = []
+        events = []
+        for c in raw:
+            if c.name == "VEVENT":
+                dt      = c.get("DTSTART").dt
+                dt_end  = c.get("DTEND")
+                is_allday = not isinstance(dt, datetime)
+                d       = dt if is_allday else dt.date()
+                summary = str(c.get("SUMMARY", ""))
+
+                time_str = ""
+                if not is_allday:
+                    time_str = dt.strftime("%H:%M")
+                    if dt_end:
+                        end_dt = dt_end.dt
+                        if isinstance(end_dt, datetime):
+                            time_str += "–" + end_dt.strftime("%H:%M")
+
+                events.append({
+                    "date":     d,
+                    "dt":       dt,
+                    "summary":  summary,
+                    "time_str": time_str,
+                    "allday":   is_allday,
+                })
+        events.sort(key=lambda e: (e["date"], e["time_str"]))
         return events
 
     def _get_ical_todos(self, cal, show_completed, limit):
@@ -129,38 +183,22 @@ class CalendarTodoPlugin(BasePlugin):
         return todos
 
     # ------------------------------------------------------------------
-    # Google Keep  (unofficial gkeepapi)
+    # Google Keep
     # ------------------------------------------------------------------
 
     def _get_keep_todos(self, email, master_token, note_title, show_completed, limit):
-        """
-        Reads a checklist (or text) note from Google Keep.
-        Requires: pip install gkeepapi
-        Get master_token via gpsoauth — see README for instructions.
-        If you have 2FA, use a Google App Password as the master_token.
-        """
         try:
             import gkeepapi
         except ImportError:
-            raise RuntimeError(
-                "gkeepapi is not installed. "
-                "Run: pip install gkeepapi  (inside the InkyPi venv)"
-            )
-
+            raise RuntimeError("gkeepapi not installed. Run: pip install gkeepapi")
         if not email or not master_token:
-            raise RuntimeError(
-                "Google Keep requires both 'Email' and 'Master token' in plugin settings."
-            )
-
+            raise RuntimeError("Google Keep requires email and master token in settings.")
         keep = gkeepapi.Keep()
         try:
             keep.authenticate(email, master_token)
         except Exception as e:
-            raise RuntimeError(f"Google Keep authentication failed: {e}")
-
+            raise RuntimeError(f"Google Keep auth failed: {e}")
         keep.sync()
-
-        # Find note by title (case-insensitive), or fall back to first pinned checklist
         note = None
         if note_title:
             for n in keep.all():
@@ -172,49 +210,35 @@ class CalendarTodoPlugin(BasePlugin):
                 if not n.trashed and n.pinned and hasattr(n, "items"):
                     note = n
                     break
-
         if note is None:
             return [{"summary": "No Keep note found", "completed": False}]
-
         todos = []
-        if hasattr(note, "items"):          # ListNote (checklist)
+        if hasattr(note, "items"):
             for item in note.items:
                 if item.checked and not show_completed:
                     continue
                 todos.append({"summary": item.text, "completed": item.checked})
                 if len(todos) >= limit:
                     break
-        else:                               # TextNote — each line is a task
+        else:
             for line in note.text.splitlines():
                 line = line.strip()
                 if line:
                     todos.append({"summary": line, "completed": False})
                     if len(todos) >= limit:
                         break
-
         return todos
 
     # ------------------------------------------------------------------
-    # Google Tasks  (official REST API)
+    # Google Tasks
     # ------------------------------------------------------------------
 
     def _get_google_tasks(self, api_key, tasklist_id, show_completed, limit):
-        """
-        Reads tasks from Google Tasks API.
-        Requires an OAuth2 bearer token stored as GOOGLE_TASKS_TOKEN in .env,
-        or pasted directly in the plugin settings.
-        """
         token = os.environ.get("GOOGLE_TASKS_TOKEN", api_key)
         if not token:
-            raise RuntimeError(
-                "Google Tasks token not set. "
-                "Add GOOGLE_TASKS_TOKEN=<token> to your InkyPi .env file, "
-                "or enter it in the plugin settings."
-            )
-
+            raise RuntimeError("Google Tasks token not set. Add GOOGLE_TASKS_TOKEN to .env")
         url = (
-            f"https://tasks.googleapis.com/tasks/v1/lists/"
-            f"{tasklist_id}/tasks"
+            f"https://tasks.googleapis.com/tasks/v1/lists/{tasklist_id}/tasks"
             f"?showCompleted={'true' if show_completed else 'false'}"
             f"&showHidden=false&maxResults={limit}"
         )
@@ -224,20 +248,17 @@ class CalendarTodoPlugin(BasePlugin):
             data = resp.json()
         except Exception as e:
             raise RuntimeError(f"Google Tasks API error: {e}")
-
         return [
             {"summary": item.get("title", ""), "completed": item.get("status") == "completed"}
             for item in data.get("items", [])
         ]
 
     # ------------------------------------------------------------------
-    # Rendering helpers
+    # Font loader
     # ------------------------------------------------------------------
 
     def _load_fonts(self, base_size=14):
-        font_dir = os.path.join(
-            os.path.dirname(__file__), "..", "base_plugin", "fonts"
-        )
+        font_dir = os.path.join(os.path.dirname(__file__), "..", "base_plugin", "fonts")
         try:
             bold   = ImageFont.truetype(os.path.join(font_dir, "DejaVuSans-Bold.ttf"), base_size + 4)
             medium = ImageFont.truetype(os.path.join(font_dir, "DejaVuSans-Bold.ttf"), base_size)
@@ -247,36 +268,43 @@ class CalendarTodoPlugin(BasePlugin):
             bold = medium = small = tiny = ImageFont.load_default()
         return bold, medium, small, tiny
 
-    def _render_calendar(self, width, height, today, month_start, month_end, events):
+    # ------------------------------------------------------------------
+    # Grid calendar renderer
+    # ------------------------------------------------------------------
+
+    def _render_calendar(self, width, height, today, month_start, month_end,
+                         events, font_size, language):
         img  = Image.new("RGB", (width, height), "white")
         draw = ImageDraw.Draw(img)
-        bold, medium, small, tiny = self._load_fonts()
+        bold, medium, small, tiny = self._load_fonts(font_size)
 
-        padding = 10
-        y = padding
+        day_names = DAY_NAMES_CS if language == "cs" else DAY_NAMES_EN
+        padding   = 10
+        y         = padding
 
-        # Month / year header
-        draw.text(
-            (width // 2, y + 12),
-            month_start.strftime("%B %Y"),
-            font=bold, fill="black", anchor="mm"
-        )
-        y += 30
+        # Month header
+        if language == "cs":
+            header = f"{MONTH_NAMES_CS[month_start.month]} {month_start.year}"
+        else:
+            header = month_start.strftime("%B %Y")
+        draw.text((width // 2, y + (font_size + 4) // 2), header,
+                  font=bold, fill="black", anchor="mm")
+        y += font_size + 10
 
-        # Day-of-week header row
-        col_w     = (width - 2 * padding) // 7
-        day_names = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"]
+        # Day-of-week row
+        col_w = (width - 2 * padding) // 7
         for i, name in enumerate(day_names):
             x = padding + i * col_w + col_w // 2
-            draw.text((x, y + 8), name, font=medium, fill="black", anchor="mm")
-        y += 20
+            draw.text((x, y + font_size // 2), name,
+                      font=medium, fill="black", anchor="mm")
+        y += font_size + 6
         draw.line([(padding, y), (width - padding, y)], fill="black", width=1)
-        y += 6
+        y += 4
 
-        # Calendar grid
+        # Grid rows
         available_h = height - y - padding
-        row_h       = max(24, available_h // 6)
-        col         = month_start.weekday()   # 0 = Monday
+        row_h       = max(font_size + 10, available_h // 6)
+        col         = month_start.weekday()
         row_y       = y
         current     = month_start
 
@@ -293,72 +321,188 @@ class CalendarTodoPlugin(BasePlugin):
                 num_color = "black"
 
             draw.text(
-                (cell_x + col_w // 2, row_y + 9),
+                (cell_x + col_w // 2, row_y + font_size // 2 + 2),
                 str(current.day),
                 font=medium, fill=num_color, anchor="mm"
             )
 
-            # Up to 2 truncated event labels per cell
             if current in events:
-                ey = row_y + 16
+                ey = row_y + font_size + 4
                 for ev in events[current][:2]:
-                    label = (ev[:10] + "…") if len(ev) > 10 else ev
+                    max_c = max(4, (col_w - 2) // max(1, tiny.size // 2))
+                    label = (ev[:max_c] + "…") if len(ev) > max_c else ev
                     draw.text((cell_x + 2, ey), label, font=tiny, fill="black")
-                    ey += 9
+                    ey += tiny.size + 1
 
             col += 1
             if col > 6:
-                col   = 0
+                col    = 0
                 row_y += row_h
-
             current += timedelta(days=1)
 
         return img
 
-    def _render_todos(self, width, height, todos):
+    # ------------------------------------------------------------------
+    # Agenda list renderer
+    # ------------------------------------------------------------------
+
+    def _render_agenda(self, width, height, today, events, font_size, language):
         img  = Image.new("RGB", (width, height), "white")
         draw = ImageDraw.Draw(img)
-        bold, medium, small, tiny = self._load_fonts()
+        bold, medium, small, tiny = self._load_fonts(font_size)
 
-        padding = 10
-        y = padding
+        padding    = 10
+        y          = padding
+        date_col_w = font_size * 4      # width reserved for the date stamp on the left
+        time_col_w = font_size * 4      # width reserved for time on right of date col
+        text_x     = padding + date_col_w + time_col_w + 6
 
-        draw.text((padding, y + 10), "To-do", font=bold, fill="black", anchor="lm")
-        y += 28
+        # Header
+        if language == "cs":
+            header = "Nadcházející události"
+        else:
+            header = "Upcoming events"
+        draw.text((width // 2, y + (font_size + 4) // 2), header,
+                  font=bold, fill="black", anchor="mm")
+        y += font_size + 10
         draw.line([(padding, y), (width - padding, y)], fill="black", width=1)
-        y += 8
+        y += 6
+
+        if not events:
+            msg = "Žádné události" if language == "cs" else "No upcoming events"
+            draw.text((padding, y), msg, font=small, fill="gray")
+            return img
+
+        last_date     = None
+        row_h         = font_size + 8    # height per event row
+        date_row_h    = font_size + 6    # height of the day-header row
+
+        for ev in events:
+            if y + row_h > height - padding:
+                break
+
+            # Day header row — only when the date changes
+            if ev["date"] != last_date:
+                if last_date is not None:
+                    # Separator between days
+                    draw.line([(padding, y + 2), (width - padding, y + 2)],
+                              fill="#cccccc", width=1)
+                    y += 4
+
+                if y + date_row_h > height - padding:
+                    break
+
+                d = ev["date"]
+                if language == "cs":
+                    dow  = DAY_SHORT_CS[d.isoweekday()]   # isoweekday: 1=Mon
+                    label = f"{dow}  {d.day}. {MONTH_NAMES_CS[d.month][:3]}."
+                else:
+                    label = d.strftime("%a  %-d %b")
+
+                is_today = (d == today)
+                if is_today:
+                    draw.rectangle(
+                        [padding - 2, y, padding + date_col_w + 60, y + date_row_h - 2],
+                        fill="black"
+                    )
+                    draw.text((padding, y + date_row_h // 2), label,
+                              font=medium, fill="white", anchor="lm")
+                else:
+                    draw.text((padding, y + date_row_h // 2), label,
+                              font=medium, fill="black", anchor="lm")
+
+                y        += date_row_h
+                last_date = ev["date"]
+
+            if y + row_h > height - padding:
+                break
+
+            # Time column
+            if ev["time_str"]:
+                draw.text((padding + date_col_w, y + row_h // 2),
+                          ev["time_str"], font=tiny, fill="#555555", anchor="lm")
+
+            # Event summary — allow full text, wrap if needed
+            summary    = ev["summary"]
+            max_chars  = max(10, (width - text_x - padding) // max(1, (font_size - 2) // 2))
+            if len(summary) > max_chars:
+                # Try to word-wrap into 2 lines
+                words    = summary.split()
+                line1    = ""
+                line2    = ""
+                for word in words:
+                    test = (line1 + " " + word).strip()
+                    if len(test) <= max_chars:
+                        line1 = test
+                    else:
+                        line2 = (line2 + " " + word).strip()
+                if line2:
+                    if len(line2) > max_chars:
+                        line2 = line2[:max_chars - 1] + "…"
+                    draw.text((text_x, y + 2), line1, font=small, fill="black")
+                    draw.text((text_x, y + 2 + font_size), line2, font=small, fill="#555555")
+                    y += row_h + font_size - 4
+                    continue
+                else:
+                    summary = line1
+
+            draw.text((text_x, y + row_h // 2), summary,
+                      font=small, fill="black", anchor="lm")
+            y += row_h
+
+        return img
+
+    # ------------------------------------------------------------------
+    # Todo renderer
+    # ------------------------------------------------------------------
+
+    def _render_todos(self, width, height, todos, font_size=14):
+        img  = Image.new("RGB", (width, height), "white")
+        draw = ImageDraw.Draw(img)
+        bold, medium, small, tiny = self._load_fonts(font_size)
+
+        padding  = 10
+        y        = padding
+        box_size = max(10, font_size - 2)
+
+        draw.text((padding, y + (font_size + 4) // 2), "To-do",
+                  font=bold, fill="black", anchor="lm")
+        y += font_size + 10
+        draw.line([(padding, y), (width - padding, y)], fill="black", width=1)
+        y += 6
 
         if not todos:
             draw.text((padding, y), "All done!", font=small, fill="gray")
             return img
 
         available = height - y - padding
-        item_h    = min(26, available // max(len(todos), 1))
-        box_size  = 11
+        item_h    = min(font_size + 10, available // max(len(todos), 1))
+        item_h    = max(item_h, font_size + 4)
 
         for task in todos:
+            if y + item_h > height - padding:
+                break
+
             bx = padding
             by = y + (item_h - box_size) // 2
-
-            draw.rectangle([bx, by, bx + box_size, by + box_size], outline="black", width=1)
-
+            draw.rectangle([bx, by, bx + box_size, by + box_size],
+                           outline="black", width=1)
             if task["completed"]:
                 draw.rectangle([bx, by, bx + box_size, by + box_size], fill="black")
-                draw.line(
-                    [(bx + 2, by + 6), (bx + 5, by + 9), (bx + 10, by + 3)],
-                    fill="white", width=1
-                )
+                # Checkmark
+                cx, cy = bx + box_size // 2, by + box_size // 2
+                draw.line([(bx + 2, cy), (cx - 1, by + box_size - 3), (bx + box_size - 2, by + 2)],
+                          fill="white", width=max(1, box_size // 6))
 
             tx    = padding + box_size + 6
             fill  = "gray" if task["completed"] else "black"
             label = task["summary"]
 
-            # Truncate to fit the panel width
-            max_chars = max(8, (width - tx - padding) // 7)
+            max_chars = max(8, (width - tx - padding) // max(1, (font_size - 2) // 2))
             if len(label) > max_chars:
                 label = label[:max_chars - 1] + "…"
 
-            draw.text((tx, y + (item_h - 13) // 2), label, font=small, fill=fill)
+            draw.text((tx, y + item_h // 2), label, font=small, fill=fill, anchor="lm")
 
             if task["completed"]:
                 tw    = draw.textlength(label, font=small)
@@ -368,5 +512,3 @@ class CalendarTodoPlugin(BasePlugin):
             y += item_h
 
         return img
-
-
