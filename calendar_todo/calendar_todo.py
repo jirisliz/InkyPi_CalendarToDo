@@ -351,17 +351,15 @@ class CalendarTodoPlugin(BasePlugin):
         draw = ImageDraw.Draw(img)
         bold, medium, small, tiny = self._load_fonts(font_size)
 
-        padding    = 10
-        y          = padding
-        date_col_w = font_size * 4      # width reserved for the date stamp on the left
-        time_col_w = font_size * 4      # width reserved for time on right of date col
-        text_x     = padding + date_col_w + time_col_w + 6
+        padding     = 10
+        indent      = padding + font_size          # event rows indented under date header
+        line_h      = font_size + 4               # height of a single text line
+        date_h      = font_size + 8               # height of a day-header row
+        sep_gap     = 4                            # gap around day separators
+        y           = padding
 
-        # Header
-        if language == "cs":
-            header = "Nadcházející události"
-        else:
-            header = "Upcoming events"
+        # Panel header
+        header = "Nadcházející události" if language == "cs" else "Upcoming events"
         draw.text((width // 2, y + (font_size + 4) // 2), header,
                   font=bold, fill="black", anchor="mm")
         y += font_size + 10
@@ -373,82 +371,93 @@ class CalendarTodoPlugin(BasePlugin):
             draw.text((padding, y), msg, font=small, fill="gray")
             return img
 
-        last_date     = None
-        row_h         = font_size + 8    # height per event row
-        date_row_h    = font_size + 6    # height of the day-header row
+        last_date = None
 
         for ev in events:
-            if y + row_h > height - padding:
-                break
-
-            # Day header row — only when the date changes
+            # ---- Day header (new date) ----
             if ev["date"] != last_date:
+                # separator line between days (skip before very first)
                 if last_date is not None:
-                    # Separator between days
-                    draw.line([(padding, y + 2), (width - padding, y + 2)],
-                              fill="#cccccc", width=1)
-                    y += 4
+                    if y + sep_gap + date_h > height - padding:
+                        break
+                    draw.line([(padding, y + sep_gap // 2),
+                               (width - padding, y + sep_gap // 2)],
+                              fill="black", width=1)
+                    y += sep_gap
 
-                if y + date_row_h > height - padding:
+                if y + date_h > height - padding:
                     break
 
                 d = ev["date"]
                 if language == "cs":
-                    dow  = DAY_SHORT_CS[d.isoweekday()]   # isoweekday: 1=Mon
+                    dow   = DAY_SHORT_CS[d.isoweekday()]
                     label = f"{dow}  {d.day}. {MONTH_NAMES_CS[d.month][:3]}."
                 else:
                     label = d.strftime("%a  %-d %b")
 
                 is_today = (d == today)
                 if is_today:
+                    # Full-width black bar for today
                     draw.rectangle(
-                        [padding - 2, y, padding + date_col_w + 60, y + date_row_h - 2],
+                        [padding - 2, y, width - padding, y + date_h - 2],
                         fill="black"
                     )
-                    draw.text((padding, y + date_row_h // 2), label,
-                              font=medium, fill="white", anchor="lm")
+                    draw.text((padding + 4, y + date_h // 2), label,
+                              font=bold, fill="white", anchor="lm")
                 else:
-                    draw.text((padding, y + date_row_h // 2), label,
-                              font=medium, fill="black", anchor="lm")
+                    draw.text((padding, y + date_h // 2), label,
+                              font=bold, fill="black", anchor="lm")
 
-                y        += date_row_h
+                y        += date_h
                 last_date = ev["date"]
 
-            if y + row_h > height - padding:
+            # ---- Event row ----
+            # Layout: two lines under the date header
+            #   line 1 (if timed):  time string   — same font as summary
+            #   line 2:             summary text
+            # All-day events: just one line with summary
+
+            if ev["time_str"]:
+                # Line 1 — time
+                if y + line_h > height - padding:
+                    break
+                draw.text((indent, y), ev["time_str"], font=small, fill="black")
+                y += line_h
+
+            # Line 2 — summary (word-wrap if too long)
+            if y + line_h > height - padding:
                 break
 
-            # Time column
-            if ev["time_str"]:
-                draw.text((padding + date_col_w, y + row_h // 2),
-                          ev["time_str"], font=tiny, fill="#555555", anchor="lm")
-
-            # Event summary — allow full text, wrap if needed
-            summary    = ev["summary"]
-            max_chars  = max(10, (width - text_x - padding) // max(1, (font_size - 2) // 2))
-            if len(summary) > max_chars:
-                # Try to word-wrap into 2 lines
-                words    = summary.split()
-                line1    = ""
-                line2    = ""
-                for word in words:
-                    test = (line1 + " " + word).strip()
-                    if len(test) <= max_chars:
-                        line1 = test
-                    else:
-                        line2 = (line2 + " " + word).strip()
-                if line2:
-                    if len(line2) > max_chars:
-                        line2 = line2[:max_chars - 1] + "…"
-                    draw.text((text_x, y + 2), line1, font=small, fill="black")
-                    draw.text((text_x, y + 2 + font_size), line2, font=small, fill="#555555")
-                    y += row_h + font_size - 4
-                    continue
+            summary   = ev["summary"]
+            max_w     = width - indent - padding
+            # measure and wrap using actual pixel widths
+            words     = summary.split()
+            line1     = ""
+            line2_words = []
+            for word in words:
+                test = (line1 + " " + word).strip()
+                tw   = draw.textlength(test, font=small)
+                if tw <= max_w:
+                    line1 = test
                 else:
-                    summary = line1
+                    line2_words.append(word)
 
-            draw.text((text_x, y + row_h // 2), summary,
-                      font=small, fill="black", anchor="lm")
-            y += row_h
+            draw.text((indent, y), line1, font=small, fill="black")
+            y += line_h
+
+            if line2_words:
+                if y + line_h > height - padding:
+                    continue
+                line2 = " ".join(line2_words)
+                if draw.textlength(line2, font=small) > max_w:
+                    # Truncate with ellipsis
+                    while line2 and draw.textlength(line2 + "…", font=small) > max_w:
+                        line2 = line2[:-1]
+                    line2 = line2.rstrip() + "…"
+                draw.text((indent, y), line2, font=small, fill="black")
+                y += line_h
+
+            y += 2   # small gap between events in the same day
 
         return img
 
