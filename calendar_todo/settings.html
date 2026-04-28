@@ -1,3 +1,4 @@
+<!-- ===== iCal ===== -->
 <div class="mb-3">
     <label class="form-label fw-semibold">iCal URL</label>
     <input type="url" class="form-control" id="ical_url" name="ical_url"
@@ -8,6 +9,7 @@
     </small>
 </div>
 
+<!-- ===== Calendar style + split ===== -->
 <div class="row mb-3">
     <div class="col">
         <label class="form-label fw-semibold">Calendar style</label>
@@ -41,6 +43,7 @@
     </div>
 </div>
 
+<!-- ===== Font size ===== -->
 <div class="mb-3">
     <label class="form-label fw-semibold">Font size</label>
     <div class="d-flex align-items-center gap-3">
@@ -49,10 +52,135 @@
                oninput="document.getElementById('font_size_val').textContent = this.value + 'px'">
         <span id="font_size_val" style="min-width:40px">14px</span>
     </div>
-    <small class="text-muted">Affects both the calendar and todo panel. Default: 14px.</small>
 </div>
 
 <hr>
+
+<!-- ===== Colours ===== -->
+<h6 class="mb-1">🎨 Colours</h6>
+<small class="text-muted d-block mb-3">
+    These apply to both panels. "Header" is the month/title bar and today highlight.
+    "Pill border / fill" affects calendar event and todo item cards.
+</small>
+
+<div class="row g-3 mb-3">
+    <!-- Calendar background -->
+    <div class="col-6 col-md-3">
+        <label class="form-label small fw-semibold">Calendar background</label>
+        <div class="d-flex align-items-center gap-2">
+            <input type="color" class="form-control form-control-color"
+                   id="cal_bg" name="cal_bg" value="#FFFFFF">
+            <input type="text" class="form-control form-control-sm font-monospace"
+                   id="cal_bg_hex" maxlength="7" value="#FFFFFF"
+                   oninput="syncFromHex('cal_bg')">
+        </div>
+    </div>
+    <!-- Calendar text -->
+    <div class="col-6 col-md-3">
+        <label class="form-label small fw-semibold">Calendar text</label>
+        <div class="d-flex align-items-center gap-2">
+            <input type="color" class="form-control form-control-color"
+                   id="cal_text" name="cal_text" value="#000000">
+            <input type="text" class="form-control form-control-sm font-monospace"
+                   id="cal_text_hex" maxlength="7" value="#000000"
+                   oninput="syncFromHex('cal_text')">
+        </div>
+    </div>
+    <!-- Header background -->
+    <div class="col-6 col-md-3">
+        <label class="form-label small fw-semibold">Header / today background</label>
+        <div class="d-flex align-items-center gap-2">
+            <input type="color" class="form-control form-control-color"
+                   id="cal_header_bg" name="cal_header_bg" value="#000000">
+            <input type="text" class="form-control form-control-sm font-monospace"
+                   id="cal_header_bg_hex" maxlength="7" value="#000000"
+                   oninput="syncFromHex('cal_header_bg')">
+        </div>
+    </div>
+    <!-- Header text -->
+    <div class="col-6 col-md-3">
+        <label class="form-label small fw-semibold">Header / today text</label>
+        <div class="d-flex align-items-center gap-2">
+            <input type="color" class="form-control form-control-color"
+                   id="cal_header_text" name="cal_header_text" value="#FFFFFF">
+            <input type="text" class="form-control form-control-sm font-monospace"
+                   id="cal_header_text_hex" maxlength="7" value="#FFFFFF"
+                   oninput="syncFromHex('cal_header_text')">
+        </div>
+    </div>
+    <!-- Pill border -->
+    <div class="col-6 col-md-3">
+        <label class="form-label small fw-semibold">Pill border (events &amp; todos)</label>
+        <div class="d-flex align-items-center gap-2">
+            <input type="color" class="form-control form-control-color"
+                   id="pill_border" name="pill_border" value="#FBBD02">
+            <input type="text" class="form-control form-control-sm font-monospace"
+                   id="pill_border_hex" maxlength="7" value="#FBBD02"
+                   oninput="syncFromHex('pill_border')">
+        </div>
+    </div>
+    <!-- Pill fill -->
+    <div class="col-6 col-md-3">
+        <label class="form-label small fw-semibold">Pill fill (events &amp; todos)</label>
+        <div class="d-flex align-items-center gap-2">
+            <input type="color" class="form-control form-control-color"
+                   id="pill_fill" name="pill_fill" value="#FFF2AD">
+            <input type="text" class="form-control form-control-sm font-monospace"
+                   id="pill_fill_hex" maxlength="7" value="#FFF2AD"
+                   oninput="syncFromHex('pill_fill')">
+        </div>
+    </div>
+    <!-- Todo background -->
+    <div class="col-6 col-md-3">
+        <label class="form-label small fw-semibold">Todo background</label>
+        <div class="d-flex align-items-center gap-2">
+            <input type="color" class="form-control form-control-color"
+                   id="todo_bg" name="todo_bg" value="#FFFFFF">
+            <input type="text" class="form-control form-control-sm font-monospace"
+                   id="todo_bg_hex" maxlength="7" value="#FFFFFF"
+                   oninput="syncFromHex('todo_bg')">
+        </div>
+    </div>
+    <!-- Todo text -->
+    <div class="col-6 col-md-3">
+        <label class="form-label small fw-semibold">Todo text</label>
+        <div class="d-flex align-items-center gap-2">
+            <input type="color" class="form-control form-control-color"
+                   id="todo_text" name="todo_text" value="#000000">
+            <input type="text" class="form-control form-control-sm font-monospace"
+                   id="todo_text_hex" maxlength="7" value="#000000"
+                   oninput="syncFromHex('todo_text')">
+        </div>
+    </div>
+    <!-- Divider -->
+    <div class="col-6 col-md-3">
+        <label class="form-label small fw-semibold">Divider line</label>
+        <div class="d-flex align-items-center gap-2">
+            <input type="color" class="form-control form-control-color"
+                   id="divider_color" name="divider_color" value="#000000">
+            <input type="text" class="form-control form-control-sm font-monospace"
+                   id="divider_color_hex" maxlength="7" value="#000000"
+                   oninput="syncFromHex('divider_color')">
+        </div>
+    </div>
+</div>
+
+<!-- Quick presets -->
+<div class="mb-3">
+    <label class="form-label small fw-semibold">Quick presets</label><br>
+    <button type="button" class="btn btn-sm btn-outline-secondary me-1 mb-1"
+            onclick="applyPreset('default')">⬜ Default (white)</button>
+    <button type="button" class="btn btn-sm btn-outline-secondary me-1 mb-1"
+            onclick="applyPreset('dark')">⬛ Dark mode</button>
+    <button type="button" class="btn btn-sm btn-outline-secondary me-1 mb-1"
+            onclick="applyPreset('keep')">🟡 Google Keep yellow</button>
+    <button type="button" class="btn btn-sm btn-outline-secondary me-1 mb-1"
+            onclick="applyPreset('blue')">🔵 Ocean blue</button>
+</div>
+
+<hr>
+
+<!-- ===== Todo source ===== -->
 <h6 class="mb-3">Todo source</h6>
 
 <div class="mb-3">
@@ -73,16 +201,13 @@
     <div class="mb-2">
         <label class="form-label">Master token</label>
         <input type="password" class="form-control" id="keep_token" name="keep_token">
-        <small class="text-muted">
-            Generate once via gpsoauth — see README.
-            Use a Google App Password if you have 2-Step Verification enabled.
-        </small>
+        <small class="text-muted">Use a Google App Password if you have 2-Step Verification.</small>
     </div>
     <div class="mb-2">
-        <label class="form-label">Note title to use as todo list</label>
+        <label class="form-label">Note title</label>
         <input type="text" class="form-control" id="keep_note_title" name="keep_note_title"
                placeholder="Shopping list">
-        <small class="text-muted">Leave blank to use the first pinned checklist note.</small>
+        <small class="text-muted">Leave blank to use the first pinned checklist.</small>
     </div>
 </div>
 
@@ -90,16 +215,12 @@
     <div class="mb-2">
         <label class="form-label">OAuth2 Bearer Token</label>
         <input type="password" class="form-control" id="tasks_api_key" name="tasks_api_key">
-        <small class="text-muted">
-            Enable the Tasks API in Google Cloud Console and paste the bearer token here,
-            or set <code>GOOGLE_TASKS_TOKEN</code> in your InkyPi <code>.env</code> file.
-        </small>
+        <small class="text-muted">Or set <code>GOOGLE_TASKS_TOKEN</code> in your InkyPi <code>.env</code>.</small>
     </div>
     <div class="mb-2">
         <label class="form-label">Task list ID</label>
         <input type="text" class="form-control" id="tasks_list_id" name="tasks_list_id"
                placeholder="@default">
-        <small class="text-muted"><code>@default</code> uses your primary task list.</small>
     </div>
 </div>
 
@@ -107,7 +228,7 @@
     <div class="mb-2">
         <label class="form-label">Tasks (one per line)</label>
         <textarea class="form-control" id="manual_todos" name="manual_todos" rows="6"
-                  placeholder="Buy groceries&#10;Call dentist&#10;Fix the thing"></textarea>
+                  placeholder="Buy groceries&#10;Call dentist"></textarea>
     </div>
 </div>
 
@@ -120,60 +241,144 @@
 </div>
 
 <div class="form-check mb-3">
-    <input class="form-check-input" type="checkbox" id="show_completed" name="show_completed" value="true">
+    <input class="form-check-input" type="checkbox" id="show_completed"
+           name="show_completed" value="true">
     <label class="form-check-label" for="show_completed">Show completed tasks (with strikethrough)</label>
 </div>
 
+<!-- ===== Script ===== -->
 <script>
-    function updateTodoFields() {
-        var v = document.getElementById('todo_source').value;
-        document.getElementById('keep_fields').style.display   = v === 'keep'   ? '' : 'none';
-        document.getElementById('tasks_fields').style.display  = v === 'tasks'  ? '' : 'none';
-        document.getElementById('manual_fields').style.display = v === 'manual' ? '' : 'none';
+/* ---- colour preset definitions ---- */
+var PRESETS = {
+    default: {
+        cal_bg:'#FFFFFF', cal_text:'#000000',
+        cal_header_bg:'#000000', cal_header_text:'#FFFFFF',
+        pill_border:'#FBBD02', pill_fill:'#FFF2AD',
+        todo_bg:'#FFFFFF', todo_text:'#000000',
+        divider_color:'#000000'
+    },
+    dark: {
+        cal_bg:'#1A1A1A', cal_text:'#EEEEEE',
+        cal_header_bg:'#333333', cal_header_text:'#FFFFFF',
+        pill_border:'#FBBD02', pill_fill:'#3A3000',
+        todo_bg:'#1A1A1A', todo_text:'#EEEEEE',
+        divider_color:'#555555'
+    },
+    keep: {
+        cal_bg:'#FFF8E1', cal_text:'#3E2000',
+        cal_header_bg:'#FBBD02', cal_header_text:'#3E2000',
+        pill_border:'#F5A800', pill_fill:'#FFF2AD',
+        todo_bg:'#FFF8E1', todo_text:'#3E2000',
+        divider_color:'#F5A800'
+    },
+    blue: {
+        cal_bg:'#E8F4FD', cal_text:'#0A2540',
+        cal_header_bg:'#1A73E8', cal_header_text:'#FFFFFF',
+        pill_border:'#1A73E8', pill_fill:'#D2E8FB',
+        todo_bg:'#E8F4FD', todo_text:'#0A2540',
+        divider_color:'#1A73E8'
     }
+};
 
-    function updateCalStyle() {
-        var v = document.getElementById('cal_style').value;
-        document.getElementById('agenda_days_col').style.display = v === 'agenda' ? '' : 'none';
+var COLOR_FIELDS = [
+    'cal_bg','cal_text','cal_header_bg','cal_header_text',
+    'pill_border','pill_fill','todo_bg','todo_text','divider_color'
+];
+
+function setColor(id, hex) {
+    var picker = document.getElementById(id);
+    var hexBox = document.getElementById(id + '_hex');
+    if (picker)  picker.value  = hex;
+    if (hexBox)  hexBox.value  = hex;
+}
+
+function syncFromPicker(id) {
+    var picker = document.getElementById(id);
+    var hexBox = document.getElementById(id + '_hex');
+    if (hexBox) hexBox.value = picker.value;
+}
+
+function syncFromHex(id) {
+    var hexBox = document.getElementById(id + '_hex');
+    var picker = document.getElementById(id);
+    var val    = hexBox.value.trim();
+    if (/^#[0-9A-Fa-f]{6}$/.test(val) && picker) {
+        picker.value = val;
     }
+}
 
-    document.getElementById('todo_source').addEventListener('change', updateTodoFields);
-    document.getElementById('cal_style').addEventListener('change', updateCalStyle);
+function applyPreset(name) {
+    var p = PRESETS[name];
+    if (!p) return;
+    COLOR_FIELDS.forEach(function(id) {
+        if (p[id]) setColor(id, p[id]);
+    });
+}
 
-    document.addEventListener('DOMContentLoaded', function() {
-        if (loadPluginSettings) {
-            document.getElementById('ical_url').value        = pluginSettings.ical_url        || '';
-            document.getElementById('num_todo_items').value  = pluginSettings.num_todo_items  || '8';
-            document.getElementById('keep_email').value      = pluginSettings.keep_email      || '';
-            document.getElementById('keep_token').value      = pluginSettings.keep_token      || '';
-            document.getElementById('keep_note_title').value = pluginSettings.keep_note_title || '';
-            document.getElementById('tasks_api_key').value   = pluginSettings.tasks_api_key   || '';
-            document.getElementById('tasks_list_id').value   = pluginSettings.tasks_list_id   || '@default';
-            document.getElementById('manual_todos').value    = pluginSettings.manual_todos    || '';
-            document.getElementById('agenda_days').value     = pluginSettings.agenda_days     || '14';
+/* Wire up colour pickers so hex boxes stay in sync */
+COLOR_FIELDS.forEach(function(id) {
+    var picker = document.getElementById(id);
+    if (picker) picker.addEventListener('input', function() { syncFromPicker(id); });
+});
 
-            var fs = pluginSettings.font_size || '14';
-            document.getElementById('font_size').value = fs;
-            document.getElementById('font_size_val').textContent = fs + 'px';
+function updateTodoFields() {
+    var v = document.getElementById('todo_source').value;
+    document.getElementById('keep_fields').style.display   = v === 'keep'   ? '' : 'none';
+    document.getElementById('tasks_fields').style.display  = v === 'tasks'  ? '' : 'none';
+    document.getElementById('manual_fields').style.display = v === 'manual' ? '' : 'none';
+}
 
-            if (pluginSettings.show_completed === 'true' || pluginSettings.show_completed === true) {
-                document.getElementById('show_completed').checked = true;
-            }
-            if (pluginSettings.split_ratio) {
-                document.getElementById('split_ratio').value = pluginSettings.split_ratio;
-            }
-            if (pluginSettings.todo_source) {
-                document.getElementById('todo_source').value = pluginSettings.todo_source;
-            }
-            if (pluginSettings.cal_style) {
-                document.getElementById('cal_style').value = pluginSettings.cal_style;
-            }
-            if (pluginSettings.language) {
-                document.getElementById('language').value = pluginSettings.language;
-            }
+function updateCalStyle() {
+    var v = document.getElementById('cal_style').value;
+    document.getElementById('agenda_days_col').style.display = v === 'agenda' ? '' : 'none';
+}
+
+document.getElementById('todo_source').addEventListener('change', updateTodoFields);
+document.getElementById('cal_style').addEventListener('change', updateCalStyle);
+
+document.addEventListener('DOMContentLoaded', function() {
+    if (loadPluginSettings) {
+        /* Text / number fields */
+        document.getElementById('ical_url').value        = pluginSettings.ical_url        || '';
+        document.getElementById('num_todo_items').value  = pluginSettings.num_todo_items  || '8';
+        document.getElementById('keep_email').value      = pluginSettings.keep_email      || '';
+        document.getElementById('keep_token').value      = pluginSettings.keep_token      || '';
+        document.getElementById('keep_note_title').value = pluginSettings.keep_note_title || '';
+        document.getElementById('tasks_api_key').value   = pluginSettings.tasks_api_key   || '';
+        document.getElementById('tasks_list_id').value   = pluginSettings.tasks_list_id   || '@default';
+        document.getElementById('manual_todos').value    = pluginSettings.manual_todos    || '';
+        document.getElementById('agenda_days').value     = pluginSettings.agenda_days     || '14';
+
+        /* Font size */
+        var fs = pluginSettings.font_size || '14';
+        document.getElementById('font_size').value = fs;
+        document.getElementById('font_size_val').textContent = fs + 'px';
+
+        /* Selects */
+        if (pluginSettings.split_ratio)  document.getElementById('split_ratio').value  = pluginSettings.split_ratio;
+        if (pluginSettings.todo_source)  document.getElementById('todo_source').value  = pluginSettings.todo_source;
+        if (pluginSettings.cal_style)    document.getElementById('cal_style').value    = pluginSettings.cal_style;
+        if (pluginSettings.language)     document.getElementById('language').value     = pluginSettings.language;
+
+        /* Checkbox */
+        if (pluginSettings.show_completed === 'true' || pluginSettings.show_completed === true) {
+            document.getElementById('show_completed').checked = true;
         }
 
-        updateTodoFields();
-        updateCalStyle();
-    });
+        /* Colours — default values mirror Python defaults */
+        var colorDefaults = {
+            cal_bg:'#FFFFFF', cal_text:'#000000',
+            cal_header_bg:'#000000', cal_header_text:'#FFFFFF',
+            pill_border:'#FBBD02', pill_fill:'#FFF2AD',
+            todo_bg:'#FFFFFF', todo_text:'#000000',
+            divider_color:'#000000'
+        };
+        COLOR_FIELDS.forEach(function(id) {
+            setColor(id, pluginSettings[id] || colorDefaults[id]);
+        });
+    }
+
+    updateTodoFields();
+    updateCalStyle();
+});
 </script>
