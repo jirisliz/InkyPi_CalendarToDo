@@ -1,12 +1,21 @@
-<!-- ===== iCal ===== -->
+<!-- ===== iCal feeds ===== -->
 <div class="mb-3">
-    <label class="form-label fw-semibold">iCal URL</label>
-    <input type="url" class="form-control" id="ical_url" name="ical_url"
-           placeholder="https://calendar.google.com/calendar/ical/...">
-    <small class="text-muted">
-        Google Calendar → Settings → your calendar → <em>Secret address in iCal format</em>.
-        Works with Outlook, Apple Calendar, and any standard .ics feed.
+    <label class="form-label fw-semibold">📅 Calendar feeds</label>
+    <small class="text-muted d-block mb-2">
+        Add one or more iCal URLs. Each calendar gets its own pill colour.
+        Google Calendar: Settings → your calendar → <em>Secret address in iCal format</em>.
     </small>
+
+    <div id="feed_list"></div>
+
+    <button type="button" class="btn btn-sm btn-outline-primary mt-2" onclick="addFeed()">
+        + Add calendar feed
+    </button>
+
+    <!-- Hidden field that holds the JSON array submitted with the form -->
+    <input type="hidden" id="ical_feeds" name="ical_feeds" value="[]">
+    <!-- Legacy single-URL field kept for backward compatibility -->
+    <input type="hidden" id="ical_url" name="ical_url" value="">
 </div>
 
 <!-- ===== Calendar style + split ===== -->
@@ -30,6 +39,7 @@
         <label class="form-label fw-semibold">Calendar / Todo split</label>
         <select class="form-select" id="split_ratio" name="split_ratio">
             <option value="0.67">Calendar 2/3 · Todo 1/3</option>
+            <option value="0.60">Calendar 3/5 · Todo 2/5</option>
             <option value="0.75">Calendar 3/4 · Todo 1/4</option>
             <option value="0.50">Calendar 1/2 · Todo 1/2</option>
         </select>
@@ -59,108 +69,72 @@
 <!-- ===== Colours ===== -->
 <h6 class="mb-1">🎨 Colours</h6>
 <small class="text-muted d-block mb-3">
-    These apply to both panels. "Header" is the month/title bar and today highlight.
-    "Pill border / fill" affects calendar event and todo item cards.
+    Calendar event pill colours are set per-feed above.
+    These control backgrounds, text, todo pills, and the divider.
 </small>
 
 <div class="row g-3 mb-3">
-    <!-- Calendar background -->
     <div class="col-6 col-md-3">
         <label class="form-label small fw-semibold">Calendar background</label>
         <div class="d-flex align-items-center gap-2">
-            <input type="color" class="form-control form-control-color"
-                   id="cal_bg" name="cal_bg" value="#FFFFFF">
-            <input type="text" class="form-control form-control-sm font-monospace"
-                   id="cal_bg_hex" maxlength="7" value="#FFFFFF"
-                   oninput="syncFromHex('cal_bg')">
+            <input type="color" class="form-control form-control-color" id="cal_bg" name="cal_bg" value="#FFFFFF">
+            <input type="text"  class="form-control form-control-sm font-monospace" id="cal_bg_hex" maxlength="7" value="#FFFFFF" oninput="syncFromHex('cal_bg')">
         </div>
     </div>
-    <!-- Calendar text -->
     <div class="col-6 col-md-3">
         <label class="form-label small fw-semibold">Calendar text</label>
         <div class="d-flex align-items-center gap-2">
-            <input type="color" class="form-control form-control-color"
-                   id="cal_text" name="cal_text" value="#000000">
-            <input type="text" class="form-control form-control-sm font-monospace"
-                   id="cal_text_hex" maxlength="7" value="#000000"
-                   oninput="syncFromHex('cal_text')">
+            <input type="color" class="form-control form-control-color" id="cal_text" name="cal_text" value="#000000">
+            <input type="text"  class="form-control form-control-sm font-monospace" id="cal_text_hex" maxlength="7" value="#000000" oninput="syncFromHex('cal_text')">
         </div>
     </div>
-    <!-- Header background -->
     <div class="col-6 col-md-3">
         <label class="form-label small fw-semibold">Header / today background</label>
         <div class="d-flex align-items-center gap-2">
-            <input type="color" class="form-control form-control-color"
-                   id="cal_header_bg" name="cal_header_bg" value="#000000">
-            <input type="text" class="form-control form-control-sm font-monospace"
-                   id="cal_header_bg_hex" maxlength="7" value="#000000"
-                   oninput="syncFromHex('cal_header_bg')">
+            <input type="color" class="form-control form-control-color" id="cal_header_bg" name="cal_header_bg" value="#000000">
+            <input type="text"  class="form-control form-control-sm font-monospace" id="cal_header_bg_hex" maxlength="7" value="#000000" oninput="syncFromHex('cal_header_bg')">
         </div>
     </div>
-    <!-- Header text -->
     <div class="col-6 col-md-3">
         <label class="form-label small fw-semibold">Header / today text</label>
         <div class="d-flex align-items-center gap-2">
-            <input type="color" class="form-control form-control-color"
-                   id="cal_header_text" name="cal_header_text" value="#FFFFFF">
-            <input type="text" class="form-control form-control-sm font-monospace"
-                   id="cal_header_text_hex" maxlength="7" value="#FFFFFF"
-                   oninput="syncFromHex('cal_header_text')">
+            <input type="color" class="form-control form-control-color" id="cal_header_text" name="cal_header_text" value="#FFFFFF">
+            <input type="text"  class="form-control form-control-sm font-monospace" id="cal_header_text_hex" maxlength="7" value="#FFFFFF" oninput="syncFromHex('cal_header_text')">
         </div>
     </div>
-    <!-- Pill border -->
-    <div class="col-6 col-md-3">
-        <label class="form-label small fw-semibold">Pill border (events &amp; todos)</label>
-        <div class="d-flex align-items-center gap-2">
-            <input type="color" class="form-control form-control-color"
-                   id="pill_border" name="pill_border" value="#FBBD02">
-            <input type="text" class="form-control form-control-sm font-monospace"
-                   id="pill_border_hex" maxlength="7" value="#FBBD02"
-                   oninput="syncFromHex('pill_border')">
-        </div>
-    </div>
-    <!-- Pill fill -->
-    <div class="col-6 col-md-3">
-        <label class="form-label small fw-semibold">Pill fill (events &amp; todos)</label>
-        <div class="d-flex align-items-center gap-2">
-            <input type="color" class="form-control form-control-color"
-                   id="pill_fill" name="pill_fill" value="#FFF2AD">
-            <input type="text" class="form-control form-control-sm font-monospace"
-                   id="pill_fill_hex" maxlength="7" value="#FFF2AD"
-                   oninput="syncFromHex('pill_fill')">
-        </div>
-    </div>
-    <!-- Todo background -->
     <div class="col-6 col-md-3">
         <label class="form-label small fw-semibold">Todo background</label>
         <div class="d-flex align-items-center gap-2">
-            <input type="color" class="form-control form-control-color"
-                   id="todo_bg" name="todo_bg" value="#FFFFFF">
-            <input type="text" class="form-control form-control-sm font-monospace"
-                   id="todo_bg_hex" maxlength="7" value="#FFFFFF"
-                   oninput="syncFromHex('todo_bg')">
+            <input type="color" class="form-control form-control-color" id="todo_bg" name="todo_bg" value="#FFFFFF">
+            <input type="text"  class="form-control form-control-sm font-monospace" id="todo_bg_hex" maxlength="7" value="#FFFFFF" oninput="syncFromHex('todo_bg')">
         </div>
     </div>
-    <!-- Todo text -->
     <div class="col-6 col-md-3">
         <label class="form-label small fw-semibold">Todo text</label>
         <div class="d-flex align-items-center gap-2">
-            <input type="color" class="form-control form-control-color"
-                   id="todo_text" name="todo_text" value="#000000">
-            <input type="text" class="form-control form-control-sm font-monospace"
-                   id="todo_text_hex" maxlength="7" value="#000000"
-                   oninput="syncFromHex('todo_text')">
+            <input type="color" class="form-control form-control-color" id="todo_text" name="todo_text" value="#000000">
+            <input type="text"  class="form-control form-control-sm font-monospace" id="todo_text_hex" maxlength="7" value="#000000" oninput="syncFromHex('todo_text')">
         </div>
     </div>
-    <!-- Divider -->
+    <div class="col-6 col-md-3">
+        <label class="form-label small fw-semibold">Todo pill border</label>
+        <div class="d-flex align-items-center gap-2">
+            <input type="color" class="form-control form-control-color" id="todo_pill_border" name="todo_pill_border" value="#FBBD02">
+            <input type="text"  class="form-control form-control-sm font-monospace" id="todo_pill_border_hex" maxlength="7" value="#FBBD02" oninput="syncFromHex('todo_pill_border')">
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <label class="form-label small fw-semibold">Todo pill fill</label>
+        <div class="d-flex align-items-center gap-2">
+            <input type="color" class="form-control form-control-color" id="todo_pill_fill" name="todo_pill_fill" value="#FFF2AD">
+            <input type="text"  class="form-control form-control-sm font-monospace" id="todo_pill_fill_hex" maxlength="7" value="#FFF2AD" oninput="syncFromHex('todo_pill_fill')">
+        </div>
+    </div>
     <div class="col-6 col-md-3">
         <label class="form-label small fw-semibold">Divider line</label>
         <div class="d-flex align-items-center gap-2">
-            <input type="color" class="form-control form-control-color"
-                   id="divider_color" name="divider_color" value="#000000">
-            <input type="text" class="form-control form-control-sm font-monospace"
-                   id="divider_color_hex" maxlength="7" value="#000000"
-                   oninput="syncFromHex('divider_color')">
+            <input type="color" class="form-control form-control-color" id="divider_color" name="divider_color" value="#000000">
+            <input type="text"  class="form-control form-control-sm font-monospace" id="divider_color_hex" maxlength="7" value="#000000" oninput="syncFromHex('divider_color')">
         </div>
     </div>
 </div>
@@ -168,14 +142,10 @@
 <!-- Quick presets -->
 <div class="mb-3">
     <label class="form-label small fw-semibold">Quick presets</label><br>
-    <button type="button" class="btn btn-sm btn-outline-secondary me-1 mb-1"
-            onclick="applyPreset('default')">⬜ Default (white)</button>
-    <button type="button" class="btn btn-sm btn-outline-secondary me-1 mb-1"
-            onclick="applyPreset('dark')">⬛ Dark mode</button>
-    <button type="button" class="btn btn-sm btn-outline-secondary me-1 mb-1"
-            onclick="applyPreset('keep')">🟡 Google Keep yellow</button>
-    <button type="button" class="btn btn-sm btn-outline-secondary me-1 mb-1"
-            onclick="applyPreset('blue')">🔵 Ocean blue</button>
+    <button type="button" class="btn btn-sm btn-outline-secondary me-1 mb-1" onclick="applyPreset('default')">⬜ Default</button>
+    <button type="button" class="btn btn-sm btn-outline-secondary me-1 mb-1" onclick="applyPreset('dark')">⬛ Dark</button>
+    <button type="button" class="btn btn-sm btn-outline-secondary me-1 mb-1" onclick="applyPreset('keep')">🟡 Keep yellow</button>
+    <button type="button" class="btn btn-sm btn-outline-secondary me-1 mb-1" onclick="applyPreset('blue')">🔵 Ocean blue</button>
 </div>
 
 <hr>
@@ -185,7 +155,7 @@
 
 <div class="mb-3">
     <select class="form-select" id="todo_source" name="todo_source">
-        <option value="ical">From same iCal (VTODO)</option>
+        <option value="ical">From same iCal (VTODO — first feed)</option>
         <option value="keep">Google Keep (gkeepapi)</option>
         <option value="tasks">Google Tasks API</option>
         <option value="manual">Manual list</option>
@@ -195,8 +165,7 @@
 <div id="keep_fields" style="display:none">
     <div class="mb-2">
         <label class="form-label">Google account email</label>
-        <input type="email" class="form-control" id="keep_email" name="keep_email"
-               placeholder="you@gmail.com">
+        <input type="email" class="form-control" id="keep_email" name="keep_email" placeholder="you@gmail.com">
     </div>
     <div class="mb-2">
         <label class="form-label">Master token</label>
@@ -205,8 +174,7 @@
     </div>
     <div class="mb-2">
         <label class="form-label">Note title</label>
-        <input type="text" class="form-control" id="keep_note_title" name="keep_note_title"
-               placeholder="Shopping list">
+        <input type="text" class="form-control" id="keep_note_title" name="keep_note_title" placeholder="Shopping list">
         <small class="text-muted">Leave blank to use the first pinned checklist.</small>
     </div>
 </div>
@@ -219,8 +187,7 @@
     </div>
     <div class="mb-2">
         <label class="form-label">Task list ID</label>
-        <input type="text" class="form-control" id="tasks_list_id" name="tasks_list_id"
-               placeholder="@default">
+        <input type="text" class="form-control" id="tasks_list_id" name="tasks_list_id" placeholder="@default">
     </div>
 </div>
 
@@ -236,98 +203,143 @@
 
 <div class="mb-3">
     <label class="form-label fw-semibold">Max todo items shown</label>
-    <input type="number" class="form-control" id="num_todo_items" name="num_todo_items"
-           value="8" min="1" max="20">
+    <input type="number" class="form-control" id="num_todo_items" name="num_todo_items" value="8" min="1" max="20">
 </div>
 
 <div class="form-check mb-3">
-    <input class="form-check-input" type="checkbox" id="show_completed"
-           name="show_completed" value="true">
+    <input class="form-check-input" type="checkbox" id="show_completed" name="show_completed" value="true">
     <label class="form-check-label" for="show_completed">Show completed tasks (with strikethrough)</label>
 </div>
 
 <!-- ===== Script ===== -->
 <script>
-/* ---- colour preset definitions ---- */
-var PRESETS = {
-    default: {
-        cal_bg:'#FFFFFF', cal_text:'#000000',
-        cal_header_bg:'#000000', cal_header_text:'#FFFFFF',
-        pill_border:'#FBBD02', pill_fill:'#FFF2AD',
-        todo_bg:'#FFFFFF', todo_text:'#000000',
-        divider_color:'#000000'
-    },
-    dark: {
-        cal_bg:'#1A1A1A', cal_text:'#EEEEEE',
-        cal_header_bg:'#333333', cal_header_text:'#FFFFFF',
-        pill_border:'#FBBD02', pill_fill:'#3A3000',
-        todo_bg:'#1A1A1A', todo_text:'#EEEEEE',
-        divider_color:'#555555'
-    },
-    keep: {
-        cal_bg:'#FFF8E1', cal_text:'#3E2000',
-        cal_header_bg:'#FBBD02', cal_header_text:'#3E2000',
-        pill_border:'#F5A800', pill_fill:'#FFF2AD',
-        todo_bg:'#FFF8E1', todo_text:'#3E2000',
-        divider_color:'#F5A800'
-    },
-    blue: {
-        cal_bg:'#E8F4FD', cal_text:'#0A2540',
-        cal_header_bg:'#1A73E8', cal_header_text:'#FFFFFF',
-        pill_border:'#1A73E8', pill_fill:'#D2E8FB',
-        todo_bg:'#E8F4FD', todo_text:'#0A2540',
-        divider_color:'#1A73E8'
-    }
-};
-
-var COLOR_FIELDS = [
-    'cal_bg','cal_text','cal_header_bg','cal_header_text',
-    'pill_border','pill_fill','todo_bg','todo_text','divider_color'
+/* ---- Default calendar pill colours (mirror Python DEFAULT_CAL_COLORS) ---- */
+var DEFAULT_FEED_COLORS = [
+    {border: '#FBBD02', fill: '#FFF2AD'},
+    {border: '#1A73E8', fill: '#D2E8FB'},
+    {border: '#34A853', fill: '#D4EDDA'},
+    {border: '#EA4335', fill: '#FCDBD9'},
+    {border: '#9C27B0', fill: '#EAD5F5'},
 ];
 
+/* ---- Colour presets ---- */
+var PRESETS = {
+    default: {cal_bg:'#FFFFFF',cal_text:'#000000',cal_header_bg:'#000000',cal_header_text:'#FFFFFF',
+              todo_bg:'#FFFFFF',todo_text:'#000000',todo_pill_border:'#FBBD02',todo_pill_fill:'#FFF2AD',divider_color:'#000000'},
+    dark:    {cal_bg:'#1A1A1A',cal_text:'#EEEEEE',cal_header_bg:'#333333',cal_header_text:'#FFFFFF',
+              todo_bg:'#1A1A1A',todo_text:'#EEEEEE',todo_pill_border:'#FBBD02',todo_pill_fill:'#3A3000',divider_color:'#555555'},
+    keep:    {cal_bg:'#FFF8E1',cal_text:'#3E2000',cal_header_bg:'#FBBD02',cal_header_text:'#3E2000',
+              todo_bg:'#FFF8E1',todo_text:'#3E2000',todo_pill_border:'#F5A800',todo_pill_fill:'#FFF2AD',divider_color:'#F5A800'},
+    blue:    {cal_bg:'#E8F4FD',cal_text:'#0A2540',cal_header_bg:'#1A73E8',cal_header_text:'#FFFFFF',
+              todo_bg:'#E8F4FD',todo_text:'#0A2540',todo_pill_border:'#1A73E8',todo_pill_fill:'#D2E8FB',divider_color:'#1A73E8'},
+};
+
+var COLOR_FIELDS = ['cal_bg','cal_text','cal_header_bg','cal_header_text',
+                    'todo_bg','todo_text','todo_pill_border','todo_pill_fill','divider_color'];
+
 function setColor(id, hex) {
-    var picker = document.getElementById(id);
-    var hexBox = document.getElementById(id + '_hex');
-    if (picker)  picker.value  = hex;
-    if (hexBox)  hexBox.value  = hex;
+    var p = document.getElementById(id);
+    var h = document.getElementById(id + '_hex');
+    if (p) p.value = hex;
+    if (h) h.value = hex;
 }
-
 function syncFromPicker(id) {
-    var picker = document.getElementById(id);
-    var hexBox = document.getElementById(id + '_hex');
-    if (hexBox) hexBox.value = picker.value;
+    var h = document.getElementById(id + '_hex');
+    if (h) h.value = document.getElementById(id).value;
 }
-
 function syncFromHex(id) {
-    var hexBox = document.getElementById(id + '_hex');
-    var picker = document.getElementById(id);
-    var val    = hexBox.value.trim();
-    if (/^#[0-9A-Fa-f]{6}$/.test(val) && picker) {
-        picker.value = val;
-    }
+    var h = document.getElementById(id + '_hex');
+    var p = document.getElementById(id);
+    if (/^#[0-9A-Fa-f]{6}$/.test(h.value) && p) p.value = h.value;
 }
-
 function applyPreset(name) {
-    var p = PRESETS[name];
-    if (!p) return;
-    COLOR_FIELDS.forEach(function(id) {
-        if (p[id]) setColor(id, p[id]);
-    });
+    var p = PRESETS[name]; if (!p) return;
+    COLOR_FIELDS.forEach(function(id) { if (p[id]) setColor(id, p[id]); });
 }
-
-/* Wire up colour pickers so hex boxes stay in sync */
 COLOR_FIELDS.forEach(function(id) {
-    var picker = document.getElementById(id);
-    if (picker) picker.addEventListener('input', function() { syncFromPicker(id); });
+    var p = document.getElementById(id);
+    if (p) p.addEventListener('input', function() { syncFromPicker(id); });
 });
 
+/* ---- Feed rows ---- */
+var feeds = [];   // [{url, name, border, fill}, ...]
+
+function renderFeeds() {
+    var container = document.getElementById('feed_list');
+    container.innerHTML = '';
+    feeds.forEach(function(feed, i) {
+        var def = DEFAULT_FEED_COLORS[i % DEFAULT_FEED_COLORS.length];
+        var row = document.createElement('div');
+        row.className = 'border rounded p-2 mb-2 position-relative';
+        row.innerHTML =
+            '<div class="row g-2 align-items-end">' +
+            '  <div class="col-md-4">' +
+            '    <label class="form-label small mb-1">Name</label>' +
+            '    <input type="text" class="form-control form-control-sm" placeholder="My calendar" ' +
+            '           value="' + escHtml(feed.name || '') + '" ' +
+            '           onchange="feeds[' + i + '].name = this.value; saveFeeds()">' +
+            '  </div>' +
+            '  <div class="col-md-5">' +
+            '    <label class="form-label small mb-1">iCal URL</label>' +
+            '    <input type="url" class="form-control form-control-sm" placeholder="https://..." ' +
+            '           value="' + escHtml(feed.url || '') + '" ' +
+            '           onchange="feeds[' + i + '].url = this.value; saveFeeds()">' +
+            '  </div>' +
+            '  <div class="col-auto">' +
+            '    <label class="form-label small mb-1">Border</label>' +
+            '    <input type="color" class="form-control form-control-color form-control-sm" ' +
+            '           value="' + (feed.border || def.border) + '" ' +
+            '           oninput="feeds[' + i + '].border = this.value; saveFeeds()">' +
+            '  </div>' +
+            '  <div class="col-auto">' +
+            '    <label class="form-label small mb-1">Fill</label>' +
+            '    <input type="color" class="form-control form-control-color form-control-sm" ' +
+            '           value="' + (feed.fill || def.fill) + '" ' +
+            '           oninput="feeds[' + i + '].fill = this.value; saveFeeds()">' +
+            '  </div>' +
+            '  <div class="col-auto">' +
+            '    <button type="button" class="btn btn-sm btn-outline-danger" ' +
+            '            onclick="removeFeed(' + i + ')">✕</button>' +
+            '  </div>' +
+            '</div>';
+        container.appendChild(row);
+    });
+    saveFeeds();
+}
+
+function addFeed() {
+    var idx = feeds.length;
+    var def = DEFAULT_FEED_COLORS[idx % DEFAULT_FEED_COLORS.length];
+    feeds.push({url:'', name:'Calendar ' + (idx+1), border: def.border, fill: def.fill});
+    renderFeeds();
+}
+
+function removeFeed(i) {
+    feeds.splice(i, 1);
+    renderFeeds();
+}
+
+function saveFeeds() {
+    document.getElementById('ical_feeds').value = JSON.stringify(
+        feeds.map(function(f) {
+            return {url: f.url, name: f.name || '', border: f.border, fill: f.fill};
+        })
+    );
+    /* also write first URL to legacy ical_url field */
+    document.getElementById('ical_url').value = feeds.length > 0 ? (feeds[0].url || '') : '';
+}
+
+function escHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+/* ---- Show/hide todo source sub-fields ---- */
 function updateTodoFields() {
     var v = document.getElementById('todo_source').value;
     document.getElementById('keep_fields').style.display   = v === 'keep'   ? '' : 'none';
     document.getElementById('tasks_fields').style.display  = v === 'tasks'  ? '' : 'none';
     document.getElementById('manual_fields').style.display = v === 'manual' ? '' : 'none';
 }
-
 function updateCalStyle() {
     var v = document.getElementById('cal_style').value;
     document.getElementById('agenda_days_col').style.display = v === 'agenda' ? '' : 'none';
@@ -336,10 +348,10 @@ function updateCalStyle() {
 document.getElementById('todo_source').addEventListener('change', updateTodoFields);
 document.getElementById('cal_style').addEventListener('change', updateCalStyle);
 
+/* ---- Prepopulate on load ---- */
 document.addEventListener('DOMContentLoaded', function() {
     if (loadPluginSettings) {
         /* Text / number fields */
-        document.getElementById('ical_url').value        = pluginSettings.ical_url        || '';
         document.getElementById('num_todo_items').value  = pluginSettings.num_todo_items  || '8';
         document.getElementById('keep_email').value      = pluginSettings.keep_email      || '';
         document.getElementById('keep_token').value      = pluginSettings.keep_token      || '';
@@ -361,21 +373,42 @@ document.addEventListener('DOMContentLoaded', function() {
         if (pluginSettings.language)     document.getElementById('language').value     = pluginSettings.language;
 
         /* Checkbox */
-        if (pluginSettings.show_completed === 'true' || pluginSettings.show_completed === true) {
+        if (pluginSettings.show_completed === 'true' || pluginSettings.show_completed === true)
             document.getElementById('show_completed').checked = true;
-        }
 
-        /* Colours — default values mirror Python defaults */
-        var colorDefaults = {
-            cal_bg:'#FFFFFF', cal_text:'#000000',
-            cal_header_bg:'#000000', cal_header_text:'#FFFFFF',
-            pill_border:'#FBBD02', pill_fill:'#FFF2AD',
-            todo_bg:'#FFFFFF', todo_text:'#000000',
-            divider_color:'#000000'
-        };
+        /* Colours */
+        var colorDefaults = {cal_bg:'#FFFFFF',cal_text:'#000000',cal_header_bg:'#000000',
+            cal_header_text:'#FFFFFF',todo_bg:'#FFFFFF',todo_text:'#000000',
+            todo_pill_border:'#FBBD02',todo_pill_fill:'#FFF2AD',divider_color:'#000000'};
         COLOR_FIELDS.forEach(function(id) {
             setColor(id, pluginSettings[id] || colorDefaults[id]);
         });
+
+        /* Feed list — try ical_feeds JSON, fall back to legacy ical_url */
+        var feedsJson = pluginSettings.ical_feeds || '[]';
+        try {
+            var parsed = JSON.parse(feedsJson);
+            if (parsed.length > 0) {
+                feeds = parsed.map(function(f, i) {
+                    var def = DEFAULT_FEED_COLORS[i % DEFAULT_FEED_COLORS.length];
+                    return {url: f.url||'', name: f.name||('Calendar '+(i+1)),
+                            border: f.border||def.border, fill: f.fill||def.fill};
+                });
+            }
+        } catch(e) {}
+
+        /* Legacy single URL → create one feed entry */
+        if (feeds.length === 0 && pluginSettings.ical_url) {
+            feeds.push({url: pluginSettings.ical_url, name: 'Calendar 1',
+                        border: DEFAULT_FEED_COLORS[0].border,
+                        fill:   DEFAULT_FEED_COLORS[0].fill});
+        }
+
+        /* Always show at least one row */
+        if (feeds.length === 0) addFeed();
+        else renderFeeds();
+    } else {
+        addFeed();   /* fresh form — start with one empty row */
     }
 
     updateTodoFields();

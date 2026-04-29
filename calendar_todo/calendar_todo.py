@@ -1,3 +1,4 @@
+import json
 import logging
 from datetime import datetime, date, timedelta
 from icalendar import Calendar
@@ -10,15 +11,28 @@ from plugins.base_plugin.base_plugin import BasePlugin
 
 logger = logging.getLogger(__name__)
 
-DAY_NAMES_CS   = ["Po", "Út", "St", "Čt", "Pá", "So", "Ne"]
-DAY_NAMES_EN   = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"]
-MONTH_NAMES_CS = ["", "Leden", "Únor", "Březen", "Duben", "Květen", "Červen",
+# Full day/month names
+DAY_FULL_CS    = ["", "Pondělí", "Úterý", "Středa", "Čtvrtek", "Pátek", "Sobota", "Neděle"]
+DAY_FULL_EN    = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+MONTH_FULL_CS  = ["", "Leden", "Únor", "Březen", "Duben", "Květen", "Červen",
                   "Červenec", "Srpen", "Září", "Říjen", "Listopad", "Prosinec"]
+MONTH_FULL_EN  = ["", "January", "February", "March", "April", "May", "June",
+                  "July", "August", "September", "October", "November", "December"]
+# Short names still used in the grid header row (space is limited there)
 DAY_SHORT_CS   = ["", "Po", "Út", "St", "Čt", "Pá", "So", "Ne"]
+DAY_SHORT_EN   = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"]
+
+# Default calendar colours (border, fill) — cycled when multiple iCal feeds
+DEFAULT_CAL_COLORS = [
+    ("#FBBD02", "#FFF2AD"),  # yellow  (Google Keep)
+    ("#1A73E8", "#D2E8FB"),  # blue
+    ("#34A853", "#D4EDDA"),  # green
+    ("#EA4335", "#FCDBD9"),  # red
+    ("#9C27B0", "#EAD5F5"),  # purple
+]
 
 
 def hex_to_rgb(hex_str, fallback=(0, 0, 0)):
-    """Convert #RRGGBB string to (R, G, B) tuple."""
     try:
         h = hex_str.strip().lstrip("#")
         return tuple(int(h[i:i+2], 16) for i in (0, 2, 4))
@@ -26,22 +40,11 @@ def hex_to_rgb(hex_str, fallback=(0, 0, 0)):
         return fallback
 
 
-def lighten(rgb, factor=0.35):
-    """Mix colour with white to produce a pale fill version."""
-    r, g, b = rgb
-    return (
-        int(r + (255 - r) * factor),
-        int(g + (255 - g) * factor),
-        int(b + (255 - b) * factor),
-    )
-
-
 class CalendarTodoPlugin(BasePlugin):
     """
     Landscape split-screen InkyPi plugin.
-    Left panel : monthly grid OR agenda list.
-    Right panel: todo list.
-    Fully configurable colours and font size.
+    Left : monthly grid OR agenda — supports multiple iCal feeds with individual colours.
+    Right: todo list.
     """
 
     # ------------------------------------------------------------------ #
@@ -55,7 +58,6 @@ class CalendarTodoPlugin(BasePlugin):
         calendar_width = int(width * ratio)
         todo_width     = width - calendar_width
 
-        # Core settings
         ical_url        = settings.get("ical_url", "").strip()
         todo_source     = settings.get("todo_source", "ical")
         show_completed  = settings.get("show_completed", "false") in (True, "true", "True", "1")
@@ -71,42 +73,45 @@ class CalendarTodoPlugin(BasePlugin):
         agenda_days     = int(settings.get("agenda_days", 14))
         language        = settings.get("language", "en")
 
-        # Colour settings — all as (R,G,B) tuples
-        cal_bg          = hex_to_rgb(settings.get("cal_bg",       "#FFFFFF"), (255, 255, 255))
-        cal_text        = hex_to_rgb(settings.get("cal_text",     "#000000"), (0,   0,   0  ))
-        cal_header_bg   = hex_to_rgb(settings.get("cal_header_bg","#000000"), (0,   0,   0  ))
-        cal_header_text = hex_to_rgb(settings.get("cal_header_text","#FFFFFF"),(255,255,255))
-        pill_border     = hex_to_rgb(settings.get("pill_border",  "#FBBD02"), (251, 189,  2 ))
-        pill_fill       = hex_to_rgb(settings.get("pill_fill",    "#FFF2AD"), (255, 242, 173))
-        todo_bg         = hex_to_rgb(settings.get("todo_bg",      "#FFFFFF"), (255, 255, 255))
-        todo_text       = hex_to_rgb(settings.get("todo_text",    "#000000"), (0,   0,   0  ))
-        divider_color   = hex_to_rgb(settings.get("divider_color","#000000"), (0,   0,   0  ))
+        # Parse multiple iCal feeds from JSON stored in settings
+        # Format: [{"url": "...", "border": "#FBBD02", "fill": "#FFF2AD"}, ...]
+        ical_feeds = self._parse_ical_feeds(settings, ical_url)
+
+        if not ical_feeds:
+            raise RuntimeError(
+                "Please provide at least one iCal URL in the calendar feeds section."
+            )
+
+        # Colours
+        cal_bg          = hex_to_rgb(settings.get("cal_bg",        "#FFFFFF"), (255, 255, 255))
+        cal_text        = hex_to_rgb(settings.get("cal_text",      "#000000"), (0,   0,   0  ))
+        cal_header_bg   = hex_to_rgb(settings.get("cal_header_bg", "#000000"), (0,   0,   0  ))
+        cal_header_text = hex_to_rgb(settings.get("cal_header_text","#FFFFFF"),(255, 255, 255))
+        todo_bg         = hex_to_rgb(settings.get("todo_bg",       "#FFFFFF"), (255, 255, 255))
+        todo_text       = hex_to_rgb(settings.get("todo_text",     "#000000"), (0,   0,   0  ))
+        todo_pill_bdr   = hex_to_rgb(settings.get("todo_pill_border","#FBBD02"),(251, 189,  2 ))
+        todo_pill_fil   = hex_to_rgb(settings.get("todo_pill_fill", "#FFF2AD"),(255, 242, 173))
+        divider_color   = hex_to_rgb(settings.get("divider_color", "#000000"), (0,   0,   0  ))
 
         colors = dict(
             cal_bg=cal_bg, cal_text=cal_text,
             cal_header_bg=cal_header_bg, cal_header_text=cal_header_text,
-            pill_border=pill_border, pill_fill=pill_fill,
             todo_bg=todo_bg, todo_text=todo_text,
+            todo_pill_border=todo_pill_bdr, todo_pill_fill=todo_pill_fil,
             divider_color=divider_color,
         )
 
-        if not ical_url:
-            raise RuntimeError(
-                "Please provide an iCal URL. "
-                "In Google Calendar: Settings → your calendar → 'Secret address in iCal format'."
-            )
+        today = date.today()
 
-        cal_data = self._fetch_ical(ical_url)
-        today    = date.today()
-
+        # Fetch and merge events from all feeds
         if cal_style == "agenda":
             agenda_end = today + timedelta(days=agenda_days)
-            events_raw = self._get_events_with_time(cal_data, today, agenda_end)
+            all_events = self._fetch_all_agenda(ical_feeds, today, agenda_end)
         else:
             month_start = today.replace(day=1)
             next_month  = (month_start.replace(day=28) + timedelta(days=4)).replace(day=1)
             month_end   = next_month - timedelta(days=1)
-            events      = self._get_events(cal_data, month_start, month_end)
+            all_events  = self._fetch_all_grid(ical_feeds, month_start, month_end)
 
         # Todos
         if todo_source == "keep":
@@ -116,21 +121,26 @@ class CalendarTodoPlugin(BasePlugin):
             todos = self._get_google_tasks(tasks_api_key, tasks_list_id,
                                            show_completed, num_todo_items)
         elif todo_source == "ical":
-            todos = self._get_ical_todos(cal_data, show_completed, num_todo_items)
+            # Use first feed for todos
+            try:
+                first_cal = self._fetch_ical(ical_feeds[0]["url"])
+                todos = self._get_ical_todos(first_cal, show_completed, num_todo_items)
+            except Exception:
+                todos = []
         else:
             todos = [
                 {"summary": t.strip(), "completed": False}
                 for t in manual_todos.splitlines() if t.strip()
             ][:num_todo_items]
 
-        # Render panels
+        # Render
         if cal_style == "agenda":
             cal_img = self._render_agenda(
-                calendar_width, height, today, events_raw, font_size, language, colors
+                calendar_width, height, today, all_events, font_size, language, colors
             )
         else:
             cal_img = self._render_calendar(
-                calendar_width, height, today, month_start, month_end, events,
+                calendar_width, height, today, month_start, month_end, all_events,
                 font_size, language, colors
             )
 
@@ -139,15 +149,51 @@ class CalendarTodoPlugin(BasePlugin):
         img = Image.new("RGB", (width, height), "white")
         img.paste(cal_img,  (0, 0))
         img.paste(todo_img, (calendar_width, 0))
-
         draw = ImageDraw.Draw(img)
         draw.line([(calendar_width, 0), (calendar_width, height)],
                   fill=divider_color, width=2)
         return img
 
     # ------------------------------------------------------------------ #
-    #  iCal helpers                                                        #
+    #  Multi-feed helpers                                                  #
     # ------------------------------------------------------------------ #
+
+    def _parse_ical_feeds(self, settings, legacy_ical_url):
+        """
+        Parse the ical_feeds JSON field.  Falls back to the legacy single ical_url.
+        Returns list of dicts: [{url, border_rgb, fill_rgb}, ...]
+        """
+        feeds_json = settings.get("ical_feeds", "").strip()
+        feeds = []
+
+        if feeds_json:
+            try:
+                raw = json.loads(feeds_json)
+                for i, entry in enumerate(raw):
+                    url = entry.get("url", "").strip()
+                    if not url:
+                        continue
+                    def_bdr, def_fil = DEFAULT_CAL_COLORS[i % len(DEFAULT_CAL_COLORS)]
+                    feeds.append({
+                        "url":        url,
+                        "border_rgb": hex_to_rgb(entry.get("border", def_bdr)),
+                        "fill_rgb":   hex_to_rgb(entry.get("fill",   def_fil)),
+                        "name":       entry.get("name", f"Calendar {i+1}"),
+                    })
+            except Exception as e:
+                logger.warning(f"Could not parse ical_feeds JSON: {e}")
+
+        # Legacy single URL fallback
+        if not feeds and legacy_ical_url:
+            def_bdr, def_fil = DEFAULT_CAL_COLORS[0]
+            feeds.append({
+                "url":        legacy_ical_url,
+                "border_rgb": hex_to_rgb(def_bdr),
+                "fill_rgb":   hex_to_rgb(def_fil),
+                "name":       "Calendar",
+            })
+
+        return feeds
 
     def _fetch_ical(self, url):
         try:
@@ -155,53 +201,78 @@ class CalendarTodoPlugin(BasePlugin):
             resp.raise_for_status()
             return Calendar.from_ical(resp.text)
         except Exception as e:
-            raise RuntimeError(f"Failed to fetch calendar: {e}")
+            raise RuntimeError(f"Failed to fetch calendar ({url}): {e}")
 
-    def _get_events(self, cal, start, end):
-        try:
-            raw = recurring_ical_events.of(cal).between(
-                datetime(start.year, start.month, start.day),
-                datetime(end.year, end.month, end.day, 23, 59, 59),
-            )
-        except Exception as e:
-            logger.warning(f"Recurring events error: {e}")
-            raw = []
-        events = {}
-        for c in raw:
-            if c.name == "VEVENT":
-                dt = c.get("DTSTART").dt
-                d  = dt.date() if isinstance(dt, datetime) else dt
-                events.setdefault(d, []).append(str(c.get("SUMMARY", "")))
-        return events
+    def _fetch_all_grid(self, feeds, start, end):
+        """
+        Returns dict: {date: [{"summary", "border_rgb", "fill_rgb"}, ...]}
+        """
+        result = {}
+        for feed in feeds:
+            try:
+                cal = self._fetch_ical(feed["url"])
+                raw = recurring_ical_events.of(cal).between(
+                    datetime(start.year, start.month, start.day),
+                    datetime(end.year, end.month, end.day, 23, 59, 59),
+                )
+            except Exception as e:
+                logger.warning(f"Grid fetch error for {feed['url']}: {e}")
+                continue
+            for c in raw:
+                if c.name == "VEVENT":
+                    dt = c.get("DTSTART").dt
+                    d  = dt.date() if isinstance(dt, datetime) else dt
+                    result.setdefault(d, []).append({
+                        "summary":    str(c.get("SUMMARY", "")),
+                        "border_rgb": feed["border_rgb"],
+                        "fill_rgb":   feed["fill_rgb"],
+                    })
+        return result
 
-    def _get_events_with_time(self, cal, start, end):
-        try:
-            raw = recurring_ical_events.of(cal).between(
-                datetime(start.year, start.month, start.day),
-                datetime(end.year, end.month, end.day, 23, 59, 59),
-            )
-        except Exception as e:
-            logger.warning(f"Recurring events error: {e}")
-            raw = []
-        events = []
-        for c in raw:
-            if c.name == "VEVENT":
-                dt        = c.get("DTSTART").dt
-                dt_end    = c.get("DTEND")
-                is_allday = not isinstance(dt, datetime)
-                d         = dt if is_allday else dt.date()
-                summary   = str(c.get("SUMMARY", ""))
-                time_str  = ""
-                if not is_allday:
-                    time_str = dt.strftime("%H:%M")
-                    if dt_end:
-                        end_dt = dt_end.dt
-                        if isinstance(end_dt, datetime):
-                            time_str += "–" + end_dt.strftime("%H:%M")
-                events.append({"date": d, "dt": dt, "summary": summary,
-                                "time_str": time_str, "allday": is_allday})
-        events.sort(key=lambda e: (e["date"], e["time_str"]))
-        return events
+    def _fetch_all_agenda(self, feeds, start, end):
+        """
+        Returns sorted list of event dicts with per-feed colour.
+        """
+        result = []
+        for feed in feeds:
+            try:
+                cal = self._fetch_ical(feed["url"])
+                raw = recurring_ical_events.of(cal).between(
+                    datetime(start.year, start.month, start.day),
+                    datetime(end.year, end.month, end.day, 23, 59, 59),
+                )
+            except Exception as e:
+                logger.warning(f"Agenda fetch error for {feed['url']}: {e}")
+                continue
+            for c in raw:
+                if c.name == "VEVENT":
+                    dt        = c.get("DTSTART").dt
+                    dt_end    = c.get("DTEND")
+                    is_allday = not isinstance(dt, datetime)
+                    d         = dt if is_allday else dt.date()
+                    summary   = str(c.get("SUMMARY", ""))
+                    time_str  = ""
+                    if not is_allday:
+                        time_str = dt.strftime("%H:%M")
+                        if dt_end:
+                            end_dt = dt_end.dt
+                            if isinstance(end_dt, datetime):
+                                time_str += "–" + end_dt.strftime("%H:%M")
+                    result.append({
+                        "date":       d,
+                        "dt":         dt,
+                        "summary":    summary,
+                        "time_str":   time_str,
+                        "allday":     is_allday,
+                        "border_rgb": feed["border_rgb"],
+                        "fill_rgb":   feed["fill_rgb"],
+                    })
+        result.sort(key=lambda e: (e["date"], e["time_str"]))
+        return result
+
+    # ------------------------------------------------------------------ #
+    #  Todo data helpers                                                   #
+    # ------------------------------------------------------------------ #
 
     def _get_ical_todos(self, cal, show_completed, limit):
         todos = []
@@ -214,10 +285,6 @@ class CalendarTodoPlugin(BasePlugin):
                 if len(todos) >= limit:
                     break
         return todos
-
-    # ------------------------------------------------------------------ #
-    #  Google Keep                                                         #
-    # ------------------------------------------------------------------ #
 
     def _get_keep_todos(self, email, master_token, note_title, show_completed, limit):
         try:
@@ -262,10 +329,6 @@ class CalendarTodoPlugin(BasePlugin):
                         break
         return todos
 
-    # ------------------------------------------------------------------ #
-    #  Google Tasks                                                        #
-    # ------------------------------------------------------------------ #
-
     def _get_google_tasks(self, api_key, tasklist_id, show_completed, limit):
         token = os.environ.get("GOOGLE_TASKS_TOKEN", api_key)
         if not token:
@@ -304,17 +367,16 @@ class CalendarTodoPlugin(BasePlugin):
     def _draw_rounded_rect(self, draw, x0, y0, x1, y1, radius, fill=None, outline=None, width=1):
         r = radius
         if fill:
-            draw.rectangle([x0 + r, y0,     x1 - r, y1    ], fill=fill)
-            draw.rectangle([x0,     y0 + r, x1,     y1 - r], fill=fill)
-            draw.ellipse([x0,       y0,       x0+2*r, y0+2*r], fill=fill)
-            draw.ellipse([x1-2*r,   y0,       x1,     y0+2*r], fill=fill)
-            draw.ellipse([x0,       y1-2*r,   x0+2*r, y1    ], fill=fill)
-            draw.ellipse([x1-2*r,   y1-2*r,   x1,     y1    ], fill=fill)
+            draw.rectangle([x0+r, y0,   x1-r, y1  ], fill=fill)
+            draw.rectangle([x0,   y0+r, x1,   y1-r], fill=fill)
+            draw.ellipse([x0,     y0,     x0+2*r, y0+2*r], fill=fill)
+            draw.ellipse([x1-2*r, y0,     x1,     y0+2*r], fill=fill)
+            draw.ellipse([x0,     y1-2*r, x0+2*r, y1    ], fill=fill)
+            draw.ellipse([x1-2*r, y1-2*r, x1,     y1    ], fill=fill)
         if outline:
             draw.rounded_rectangle([x0, y0, x1, y1], radius=r, outline=outline, width=width)
 
     def _truncate(self, draw, text, font, max_w):
-        """Truncate text with ellipsis to fit max_w pixels."""
         if draw.textlength(text, font=font) <= max_w:
             return text
         while text and draw.textlength(text + "…", font=font) > max_w:
@@ -327,38 +389,37 @@ class CalendarTodoPlugin(BasePlugin):
 
     def _render_calendar(self, width, height, today, month_start, month_end,
                          events, font_size, language, colors):
-        bg       = colors["cal_bg"]
-        fg       = colors["cal_text"]
-        hdr_bg   = colors["cal_header_bg"]
-        hdr_fg   = colors["cal_header_text"]
-        pill_bdr = colors["pill_border"]
-        pill_fil = colors["pill_fill"]
+        bg      = colors["cal_bg"]
+        fg      = colors["cal_text"]
+        hdr_bg  = colors["cal_header_bg"]
+        hdr_fg  = colors["cal_header_text"]
 
         img  = Image.new("RGB", (width, height), bg)
         draw = ImageDraw.Draw(img)
         bold, medium, small, tiny = self._load_fonts(font_size)
 
-        day_names = DAY_NAMES_CS if language == "cs" else DAY_NAMES_EN
+        # Full day names for grid header — use short to fit 7 columns
+        day_short = DAY_SHORT_CS if language == "cs" else DAY_SHORT_EN
         padding   = 10
         y         = padding
 
-        # Month header bar
+        # Month header bar — full month name
         if language == "cs":
-            header = f"{MONTH_NAMES_CS[month_start.month]} {month_start.year}"
+            header = f"{MONTH_FULL_CS[month_start.month]} {month_start.year}"
         else:
-            header = month_start.strftime("%B %Y")
+            header = f"{MONTH_FULL_EN[month_start.month]} {month_start.year}"
+
         hdr_h = font_size + 12
         draw.rectangle([0, y, width, y + hdr_h], fill=hdr_bg)
         draw.text((width // 2, y + hdr_h // 2), header,
                   font=bold, fill=hdr_fg, anchor="mm")
         y += hdr_h + 4
 
-        # Day-of-week row
+        # Day-of-week header row (short names fit; full names are too wide for 7 cols)
         col_w = (width - 2 * padding) // 7
-        for i, name in enumerate(day_names):
+        for i, name in enumerate(day_short):
             x = padding + i * col_w + col_w // 2
-            draw.text((x, y + font_size // 2), name,
-                      font=medium, fill=fg, anchor="mm")
+            draw.text((x, y + font_size // 2), name, font=medium, fill=fg, anchor="mm")
         y += font_size + 6
         draw.line([(padding, y), (width - padding, y)], fill=fg, width=1)
         y += 4
@@ -375,7 +436,7 @@ class CalendarTodoPlugin(BasePlugin):
 
             if current == today:
                 draw.rectangle(
-                    [cell_x + 1, row_y + 1, cell_x + col_w - 2, row_y + row_h - 2],
+                    [cell_x+1, row_y+1, cell_x+col_w-2, row_y+row_h-2],
                     fill=hdr_bg
                 )
                 num_color = hdr_fg
@@ -387,21 +448,21 @@ class CalendarTodoPlugin(BasePlugin):
                 str(current.day), font=medium, fill=num_color, anchor="mm"
             )
 
-            # Event pills in cell (up to 2)
             if current in events:
                 ey = row_y + font_size + 6
                 for ev in events[current][:2]:
                     if ey + tiny.size + 2 > row_y + row_h:
                         break
-                    pw = col_w - 4
-                    label = self._truncate(draw, ev, tiny, pw - 4)
-                    self._draw_rounded_rect(draw, cell_x + 2, ey,
-                                            cell_x + 2 + pw, ey + tiny.size + 2,
-                                            radius=2, fill=pill_fil)
-                    draw.rounded_rectangle([cell_x + 2, ey,
-                                            cell_x + 2 + pw, ey + tiny.size + 2],
-                                           radius=2, outline=pill_bdr, width=1)
-                    draw.text((cell_x + 4, ey + 1), label, font=tiny, fill=fg)
+                    pw    = col_w - 4
+                    label = self._truncate(draw, ev["summary"], tiny, pw - 4)
+                    b_rgb = ev["border_rgb"]
+                    f_rgb = ev["fill_rgb"]
+                    self._draw_rounded_rect(draw, cell_x+2, ey,
+                                            cell_x+2+pw, ey+tiny.size+2,
+                                            radius=2, fill=f_rgb)
+                    draw.rounded_rectangle([cell_x+2, ey, cell_x+2+pw, ey+tiny.size+2],
+                                           radius=2, outline=b_rgb, width=1)
+                    draw.text((cell_x+4, ey+1), label, font=tiny, fill=fg)
                     ey += tiny.size + 3
 
             col += 1
@@ -417,12 +478,10 @@ class CalendarTodoPlugin(BasePlugin):
     # ------------------------------------------------------------------ #
 
     def _render_agenda(self, width, height, today, events, font_size, language, colors):
-        bg       = colors["cal_bg"]
-        fg       = colors["cal_text"]
-        hdr_bg   = colors["cal_header_bg"]
-        hdr_fg   = colors["cal_header_text"]
-        pill_bdr = colors["pill_border"]
-        pill_fil = colors["pill_fill"]
+        bg      = colors["cal_bg"]
+        fg      = colors["cal_text"]
+        hdr_bg  = colors["cal_header_bg"]
+        hdr_fg  = colors["cal_header_text"]
 
         img  = Image.new("RGB", (width, height), bg)
         draw = ImageDraw.Draw(img)
@@ -438,7 +497,6 @@ class CalendarTodoPlugin(BasePlugin):
         sep_gap    = 6
         y          = padding
 
-        # Fixed time-slot width measured from sample string
         sample_time_w = int(draw.textlength("00:00–00:00", font=small))
         time_w        = sample_time_w + pill_pad_x
         summary_x     = indent + time_w + pill_pad_x + 4
@@ -460,7 +518,7 @@ class CalendarTodoPlugin(BasePlugin):
         pill_h    = font_size + pill_pad_y * 2
 
         for ev in events:
-            # Day header
+            # Day header — full day name + full month name
             if ev["date"] != last_date:
                 if last_date is not None:
                     y += sep_gap
@@ -474,10 +532,11 @@ class CalendarTodoPlugin(BasePlugin):
 
                 d = ev["date"]
                 if language == "cs":
-                    dow   = DAY_SHORT_CS[d.isoweekday()]
-                    label = f"{dow}  {d.day}. {MONTH_NAMES_CS[d.month][:3]}."
+                    dow   = DAY_FULL_CS[d.isoweekday()]
+                    label = f"{dow}  {d.day}. {MONTH_FULL_CS[d.month]}"
                 else:
-                    label = d.strftime("%a  %-d %b")
+                    dow   = DAY_FULL_EN[d.weekday()]
+                    label = f"{dow}  {d.day} {MONTH_FULL_EN[d.month]}"
 
                 if d == today:
                     draw.rectangle(
@@ -493,10 +552,12 @@ class CalendarTodoPlugin(BasePlugin):
                 y        += date_h
                 last_date = ev["date"]
 
-            # Event pill
+            # Event pill — per-feed colour
             if y + pill_h + pill_pad_y > height - padding:
                 break
 
+            pill_bdr = ev["border_rgb"]
+            pill_fil = ev["fill_rgb"]
             px0, px1 = indent, width - padding
             py0, py1 = y, y + pill_h
 
@@ -524,10 +585,12 @@ class CalendarTodoPlugin(BasePlugin):
     def _render_todos(self, width, height, todos, font_size=14, language="en", colors=None):
         if colors is None:
             colors = {}
-        bg       = colors.get("todo_bg",      (255, 255, 255))
-        fg       = colors.get("todo_text",    (0,   0,   0  ))
-        pill_bdr = colors.get("pill_border",  (251, 189,  2 ))
-        pill_fil = colors.get("pill_fill",    (255, 242, 173))
+        bg       = colors.get("todo_bg",          (255, 255, 255))
+        fg       = colors.get("todo_text",         (0,   0,   0  ))
+        pill_bdr = colors.get("todo_pill_border",  (251, 189,  2 ))
+        pill_fil = colors.get("todo_pill_fill",    (255, 242, 173))
+        hdr_bg   = colors.get("cal_header_bg",     (0,   0,   0  ))
+        hdr_fg   = colors.get("cal_header_text",   (255, 255, 255))
 
         img  = Image.new("RGB", (width, height), bg)
         draw = ImageDraw.Draw(img)
@@ -540,10 +603,7 @@ class CalendarTodoPlugin(BasePlugin):
         box_size  = max(10, font_size - 2)
         y         = padding
 
-        # Header bar (reuse cal_header_bg/text so they match when same color is chosen)
-        hdr_bg  = colors.get("cal_header_bg",   (0,   0,   0  ))
-        hdr_fg  = colors.get("cal_header_text",  (255, 255, 255))
-        hdr_h   = font_size + 12
+        hdr_h = font_size + 12
         draw.rectangle([0, y, width, y + hdr_h], fill=hdr_bg)
         draw.text((width // 2, y + hdr_h // 2), "To-do",
                   font=bold, fill=hdr_fg, anchor="mm")
@@ -570,19 +630,15 @@ class CalendarTodoPlugin(BasePlugin):
             draw.rounded_rectangle([px0, py0, px1, py1],
                                    radius=pill_r, outline=pill_bdr, width=2)
 
-            # Checkbox
             bx = px0 + pill_padx
             by = py0 + (pill_h - box_size) // 2
-            draw.rectangle([bx, by, bx + box_size, by + box_size],
-                           outline=fg, width=1)
+            draw.rectangle([bx, by, bx+box_size, by+box_size], outline=fg, width=1)
             if task["completed"]:
-                draw.rectangle([bx, by, bx + box_size, by + box_size], fill=fg)
+                draw.rectangle([bx, by, bx+box_size, by+box_size], fill=fg)
                 cx, cy = bx + box_size // 2, by + box_size // 2
-                draw.line([(bx + 2, cy), (cx - 1, by + box_size - 3),
-                           (bx + box_size - 2, by + 2)],
+                draw.line([(bx+2, cy), (cx-1, by+box_size-3), (bx+box_size-2, by+2)],
                           fill=bg, width=max(1, box_size // 6))
 
-            # Label
             text_color = (128, 128, 128) if task["completed"] else fg
             label = self._truncate(draw, task["summary"], small, px1 - tx - pill_padx)
             draw.text((tx, py0 + pill_h // 2), label, font=small,
@@ -591,7 +647,7 @@ class CalendarTodoPlugin(BasePlugin):
             if task["completed"]:
                 tw    = draw.textlength(label, font=small)
                 mid_y = py0 + pill_h // 2
-                draw.line([(tx, mid_y), (tx + tw, mid_y)], fill=text_color, width=1)
+                draw.line([(tx, mid_y), (tx+tw, mid_y)], fill=text_color, width=1)
 
             y += pill_h + item_gap
 
