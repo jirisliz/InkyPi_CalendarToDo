@@ -59,7 +59,6 @@ class CalendarTodoPlugin(BasePlugin):
         todo_width     = width - calendar_width
 
         ical_url        = settings.get("ical_url", "").strip()
-        todo_source     = settings.get("todo_source", "ical")
         show_completed  = settings.get("show_completed", "false") in (True, "true", "True", "1")
         num_todo_items  = int(settings.get("num_todo_items", 8))
         keep_note_title = settings.get("keep_note_title", "").strip()
@@ -119,33 +118,58 @@ class CalendarTodoPlugin(BasePlugin):
             month_end   = next_month - timedelta(days=1)
             all_events  = self._fetch_all_grid(ical_feeds, month_start, month_end)
 
-        # Todos
-        if todo_source == "combined":
-            # Merge Google Keep + iCal VTODOs into one sorted list
-            todos = self._get_combined_todos(
-                keep_email, keep_token, keep_note_title,
-                ical_feeds, show_completed, num_todo_items, settings
-            )
-        elif todo_source == "keep":
-            raw = self._get_keep_todos(keep_email, keep_token, keep_note_title,
-                                       show_completed, num_todo_items)
-            todos = [dict(t, source="keep") for t in raw]
-        elif todo_source == "tasks":
-            raw = self._get_google_tasks(tasks_api_key, tasks_list_id,
-                                         show_completed, num_todo_items)
-            todos = [dict(t, source="tasks") for t in raw]
-        elif todo_source == "ical":
+        # --- Todos: each source has an independent "use_*" checkbox ---
+        def _checked(key):
+            v = settings.get(key, "false")
+            return v in (True, "true", "True", "1")
+
+        combined = []
+
+        if _checked("use_ical"):
             try:
                 first_cal = self._fetch_ical(ical_feeds[0]["url"])
-                raw = self._get_ical_todos(first_cal, show_completed, num_todo_items)
-                todos = [dict(t, source="ical") for t in raw]
-            except Exception:
-                todos = []
-        else:
-            todos = [
-                {"summary": t.strip(), "completed": False, "source": "manual"}
-                for t in manual_todos.splitlines() if t.strip()
-            ][:num_todo_items]
+                for t in self._get_ical_todos(first_cal, show_completed, num_todo_items):
+                    combined.append(dict(t, source="ical"))
+            except Exception as e:
+                logger.warning(f"iCal todo fetch failed: {e}")
+
+        if _checked("use_keep"):
+            try:
+                for t in self._get_keep_todos(keep_email, keep_token, keep_note_title,
+                                              show_completed, num_todo_items):
+                    combined.append(dict(t, source="keep",
+                                        due_str="", due_sort="z"))
+            except Exception as e:
+                logger.warning(f"Keep todo fetch failed: {e}")
+
+        if _checked("use_tasks"):
+            try:
+                for t in self._get_google_tasks(tasks_api_key, tasks_list_id,
+                                                show_completed, num_todo_items):
+                    combined.append(dict(t, source="tasks",
+                                        due_str="", due_sort="z"))
+            except Exception as e:
+                logger.warning(f"Google Tasks fetch failed: {e}")
+
+        if _checked("use_manual"):
+            for line in manual_todos.splitlines():
+                line = line.strip()
+                if line:
+                    combined.append({"summary": line, "completed": False,
+                                     "source": "manual", "due_str": "", "due_sort": "z"})
+
+        # If no source is enabled fall back to a helpful message
+        if not any(_checked(k) for k in ("use_ical","use_keep","use_tasks","use_manual")):
+            combined = [{"summary": "No todo source enabled" if language == "en"
+                         else "Zadejte zdroj úkolů",
+                         "completed": False, "source": "manual",
+                         "due_str": "", "due_sort": "z"}]
+
+        # Sort: dated items first, then by summary; completed to bottom
+        combined.sort(key=lambda t: (t["completed"],
+                                     t.get("due_sort") or "z",
+                                     t["summary"]))
+        todos = combined[:num_todo_items]
 
         # Render
         if cal_style == "agenda":
@@ -317,53 +341,6 @@ class CalendarTodoPlugin(BasePlugin):
                 if len(todos) >= limit:
                     break
         return todos
-
-    def _get_combined_todos(self, keep_email, keep_token, keep_note_title,
-                            ical_feeds, show_completed, limit, settings):
-        """
-        Merge Google Keep checklist items + iCal VTODOs into one list.
-        iCal tasks with a due date are sorted by due date first, then Keep items.
-        Items from each source keep their colour identity for pill rendering.
-        """
-        combined = []
-
-        # --- Keep items ---
-        try:
-            keep_raw = self._get_keep_todos(keep_email, keep_token, keep_note_title,
-                                            show_completed, limit)
-            for item in keep_raw:
-                combined.append({
-                    "summary":   item["summary"],
-                    "completed": item["completed"],
-                    "due_str":   "",
-                    "due_sort":  "z",       # sorts after dated iCal items
-                    "source":    "keep",
-                })
-        except Exception as e:
-            logger.warning(f"Combined todo: Keep fetch failed: {e}")
-
-        # --- iCal VTODOs (from all feeds) ---
-        seen_urls = set()
-        for feed in ical_feeds:
-            url = feed["url"]
-            if url in seen_urls:
-                continue
-            seen_urls.add(url)
-            try:
-                cal = self._fetch_ical(url)
-                ical_raw = self._get_ical_todos(cal, show_completed, limit)
-                for item in ical_raw:
-                    combined.append(item)   # already has source="ical"
-            except Exception as e:
-                logger.warning(f"Combined todo: iCal fetch failed ({url}): {e}")
-
-        # Sort: dated iCal items first (by due_sort), then undated / Keep
-        combined.sort(key=lambda t: (t.get("due_sort") or "z", t["summary"]))
-
-        # Completed items go to the bottom
-        combined.sort(key=lambda t: t["completed"])
-
-        return combined[:limit]
 
     def _get_keep_todos(self, email, master_token, note_title, show_completed, limit):
         try:

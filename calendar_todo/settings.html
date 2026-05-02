@@ -178,53 +178,76 @@
 
 <hr>
 
-<!-- ===== Todo source ===== -->
-<h6 class="mb-3">Todo source</h6>
+<!-- ===== Todo sources ===== -->
+<h6 class="mb-1">Todo sources</h6>
+<small class="text-muted d-block mb-3">Enable any combination. All checked sources are merged into one list.</small>
 
-<div class="mb-3">
-    <select class="form-select" id="todo_source" name="todo_source">
-        <option value="ical">From same iCal (VTODO — first feed)</option>
-        <option value="keep">Google Keep (gkeepapi)</option>
-        <option value="combined">Combined: Keep + iCal VTODOs (different colours)</option>
-        <option value="tasks">Google Tasks API</option>
-        <option value="manual">Manual list</option>
-    </select>
-</div>
-
-<div id="keep_fields" style="display:none">
-    <div class="mb-2">
-        <label class="form-label">Google account email</label>
-        <input type="email" class="form-control" id="keep_email" name="keep_email" placeholder="you@gmail.com">
+<!-- iCal VTODOs -->
+<div class="border rounded p-3 mb-2">
+    <div class="form-check mb-2">
+        <input class="form-check-input source-toggle" type="checkbox" id="use_ical" name="use_ical" value="true" data-target="ical_fields">
+        <label class="form-check-label fw-semibold" for="use_ical">iCal tasks (VTODO from first calendar feed)</label>
     </div>
-    <div class="mb-2">
-        <label class="form-label">Master token</label>
-        <input type="password" class="form-control" id="keep_token" name="keep_token">
-        <small class="text-muted">Use a Google App Password if you have 2-Step Verification.</small>
-    </div>
-    <div class="mb-2">
-        <label class="form-label">Note title</label>
-        <input type="text" class="form-control" id="keep_note_title" name="keep_note_title" placeholder="Shopping list">
-        <small class="text-muted">Leave blank to use the first pinned checklist.</small>
+    <div id="ical_fields" style="display:none">
+        <small class="text-muted">Uses the first iCal URL defined in the Calendar feeds section above. No extra config needed.</small>
     </div>
 </div>
 
-<div id="tasks_fields" style="display:none">
-    <div class="mb-2">
-        <label class="form-label">OAuth2 Bearer Token</label>
-        <input type="password" class="form-control" id="tasks_api_key" name="tasks_api_key">
-        <small class="text-muted">Or set <code>GOOGLE_TASKS_TOKEN</code> in your InkyPi <code>.env</code>.</small>
+<!-- Google Keep -->
+<div class="border rounded p-3 mb-2">
+    <div class="form-check mb-2">
+        <input class="form-check-input source-toggle" type="checkbox" id="use_keep" name="use_keep" value="true" data-target="keep_fields">
+        <label class="form-check-label fw-semibold" for="use_keep">Google Keep checklist</label>
     </div>
-    <div class="mb-2">
-        <label class="form-label">Task list ID</label>
-        <input type="text" class="form-control" id="tasks_list_id" name="tasks_list_id" placeholder="@default">
+    <div id="keep_fields" style="display:none">
+        <div class="mb-2">
+            <label class="form-label">Google account email</label>
+            <input type="email" class="form-control" id="keep_email" name="keep_email" placeholder="you@gmail.com">
+        </div>
+        <div class="mb-2">
+            <label class="form-label">Master token</label>
+            <input type="password" class="form-control" id="keep_token" name="keep_token">
+            <small class="text-muted">Use a Google App Password if you have 2-Step Verification.</small>
+        </div>
+        <div class="mb-2">
+            <label class="form-label">Note title</label>
+            <input type="text" class="form-control" id="keep_note_title" name="keep_note_title" placeholder="Shopping list">
+            <small class="text-muted">Leave blank to use the first pinned checklist.</small>
+        </div>
     </div>
 </div>
 
-<div id="manual_fields" style="display:none">
-    <div class="mb-2">
-        <label class="form-label">Tasks (one per line)</label>
-        <textarea class="form-control" id="manual_todos" name="manual_todos" rows="6"
-                  placeholder="Buy groceries&#10;Call dentist"></textarea>
+<!-- Google Tasks -->
+<div class="border rounded p-3 mb-2">
+    <div class="form-check mb-2">
+        <input class="form-check-input source-toggle" type="checkbox" id="use_tasks" name="use_tasks" value="true" data-target="tasks_fields">
+        <label class="form-check-label fw-semibold" for="use_tasks">Google Tasks API</label>
+    </div>
+    <div id="tasks_fields" style="display:none">
+        <div class="mb-2">
+            <label class="form-label">OAuth2 Bearer Token</label>
+            <input type="password" class="form-control" id="tasks_api_key" name="tasks_api_key">
+            <small class="text-muted">Or set <code>GOOGLE_TASKS_TOKEN</code> in your InkyPi <code>.env</code>.</small>
+        </div>
+        <div class="mb-2">
+            <label class="form-label">Task list ID</label>
+            <input type="text" class="form-control" id="tasks_list_id" name="tasks_list_id" placeholder="@default">
+        </div>
+    </div>
+</div>
+
+<!-- Manual list -->
+<div class="border rounded p-3 mb-2">
+    <div class="form-check mb-2">
+        <input class="form-check-input source-toggle" type="checkbox" id="use_manual" name="use_manual" value="true" data-target="manual_fields">
+        <label class="form-check-label fw-semibold" for="use_manual">Manual list</label>
+    </div>
+    <div id="manual_fields" style="display:none">
+        <div class="mb-2">
+            <label class="form-label">Tasks (one per line)</label>
+            <textarea class="form-control" id="manual_todos" name="manual_todos" rows="5"
+                      placeholder="Buy groceries&#10;Call dentist"></textarea>
+        </div>
     </div>
 </div>
 
@@ -365,19 +388,21 @@ function escHtml(s) {
     return s.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
-/* ---- Show/hide todo source sub-fields ---- */
-function updateTodoFields() {
-    var v = document.getElementById('todo_source').value;
-    document.getElementById('keep_fields').style.display   = v === 'keep'   ? '' : 'none';
-    document.getElementById('tasks_fields').style.display  = v === 'tasks'  ? '' : 'none';
-    document.getElementById('manual_fields').style.display = v === 'manual' ? '' : 'none';
+/* ---- Show/hide todo source sub-fields via checkboxes ---- */
+function updateSourceFields() {
+    document.querySelectorAll('.source-toggle').forEach(function(cb) {
+        var target = document.getElementById(cb.dataset.target);
+        if (target) target.style.display = cb.checked ? '' : 'none';
+    });
 }
 function updateCalStyle() {
     var v = document.getElementById('cal_style').value;
     document.getElementById('agenda_days_col').style.display = v === 'agenda' ? '' : 'none';
 }
 
-document.getElementById('todo_source').addEventListener('change', updateTodoFields);
+document.querySelectorAll('.source-toggle').forEach(function(cb) {
+    cb.addEventListener('change', updateSourceFields);
+});
 document.getElementById('cal_style').addEventListener('change', updateCalStyle);
 
 /* ---- Prepopulate on load ---- */
@@ -400,13 +425,17 @@ document.addEventListener('DOMContentLoaded', function() {
 
         /* Selects */
         if (pluginSettings.split_ratio)  document.getElementById('split_ratio').value  = pluginSettings.split_ratio;
-        if (pluginSettings.todo_source)  document.getElementById('todo_source').value  = pluginSettings.todo_source;
         if (pluginSettings.cal_style)    document.getElementById('cal_style').value    = pluginSettings.cal_style;
         if (pluginSettings.language)     document.getElementById('language').value     = pluginSettings.language;
 
-        /* Checkbox */
+        /* Checkboxes */
         if (pluginSettings.show_completed === 'true' || pluginSettings.show_completed === true)
             document.getElementById('show_completed').checked = true;
+        ['use_ical','use_keep','use_tasks','use_manual'].forEach(function(id) {
+            var el = document.getElementById(id);
+            if (el && (pluginSettings[id] === 'true' || pluginSettings[id] === true))
+                el.checked = true;
+        });
 
         /* Colours */
         var colorDefaults = {cal_bg:'#FFFFFF',cal_text:'#000000',cal_header_bg:'#000000',
@@ -446,7 +475,7 @@ document.addEventListener('DOMContentLoaded', function() {
         addFeed();   /* fresh form — start with one empty row */
     }
 
-    updateTodoFields();
+    updateSourceFields();
     updateCalStyle();
 });
 </script>
