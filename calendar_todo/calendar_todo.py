@@ -83,21 +83,27 @@ class CalendarTodoPlugin(BasePlugin):
             )
 
         # Colours
-        cal_bg          = hex_to_rgb(settings.get("cal_bg",        "#FFFFFF"), (255, 255, 255))
-        cal_text        = hex_to_rgb(settings.get("cal_text",      "#000000"), (0,   0,   0  ))
-        cal_header_bg   = hex_to_rgb(settings.get("cal_header_bg", "#000000"), (0,   0,   0  ))
-        cal_header_text = hex_to_rgb(settings.get("cal_header_text","#FFFFFF"),(255, 255, 255))
-        todo_bg         = hex_to_rgb(settings.get("todo_bg",       "#FFFFFF"), (255, 255, 255))
-        todo_text       = hex_to_rgb(settings.get("todo_text",     "#000000"), (0,   0,   0  ))
-        todo_pill_bdr   = hex_to_rgb(settings.get("todo_pill_border","#FBBD02"),(251, 189,  2 ))
-        todo_pill_fil   = hex_to_rgb(settings.get("todo_pill_fill", "#FFF2AD"),(255, 242, 173))
-        divider_color   = hex_to_rgb(settings.get("divider_color", "#000000"), (0,   0,   0  ))
+        cal_bg               = hex_to_rgb(settings.get("cal_bg",             "#FFFFFF"), (255, 255, 255))
+        cal_text             = hex_to_rgb(settings.get("cal_text",           "#000000"), (0,   0,   0  ))
+        cal_header_bg        = hex_to_rgb(settings.get("cal_header_bg",      "#000000"), (0,   0,   0  ))
+        cal_header_text      = hex_to_rgb(settings.get("cal_header_text",    "#FFFFFF"), (255, 255, 255))
+        todo_bg              = hex_to_rgb(settings.get("todo_bg",            "#FFFFFF"), (255, 255, 255))
+        todo_text            = hex_to_rgb(settings.get("todo_text",          "#000000"), (0,   0,   0  ))
+        todo_pill_bdr        = hex_to_rgb(settings.get("todo_pill_border",   "#FBBD02"), (251, 189,  2 ))
+        todo_pill_fil        = hex_to_rgb(settings.get("todo_pill_fill",     "#FFF2AD"), (255, 242, 173))
+        keep_pill_bdr        = hex_to_rgb(settings.get("keep_pill_border",   "#FBBD02"), (251, 189,  2 ))
+        keep_pill_fil        = hex_to_rgb(settings.get("keep_pill_fill",     "#FFF2AD"), (255, 242, 173))
+        ical_todo_pill_bdr   = hex_to_rgb(settings.get("ical_todo_pill_border","#34A853"),(52, 168,  83))
+        ical_todo_pill_fil   = hex_to_rgb(settings.get("ical_todo_pill_fill", "#D4EDDA"), (212, 237, 218))
+        divider_color        = hex_to_rgb(settings.get("divider_color",      "#000000"), (0,   0,   0  ))
 
         colors = dict(
             cal_bg=cal_bg, cal_text=cal_text,
             cal_header_bg=cal_header_bg, cal_header_text=cal_header_text,
             todo_bg=todo_bg, todo_text=todo_text,
-            todo_pill_border=todo_pill_bdr, todo_pill_fill=todo_pill_fil,
+            todo_pill_border=todo_pill_bdr,     todo_pill_fill=todo_pill_fil,
+            keep_pill_border=keep_pill_bdr,     keep_pill_fill=keep_pill_fil,
+            ical_todo_pill_border=ical_todo_pill_bdr, ical_todo_pill_fill=ical_todo_pill_fil,
             divider_color=divider_color,
         )
 
@@ -114,22 +120,30 @@ class CalendarTodoPlugin(BasePlugin):
             all_events  = self._fetch_all_grid(ical_feeds, month_start, month_end)
 
         # Todos
-        if todo_source == "keep":
-            todos = self._get_keep_todos(keep_email, keep_token, keep_note_title,
-                                         show_completed, num_todo_items)
+        if todo_source == "combined":
+            # Merge Google Keep + iCal VTODOs into one sorted list
+            todos = self._get_combined_todos(
+                keep_email, keep_token, keep_note_title,
+                ical_feeds, show_completed, num_todo_items, settings
+            )
+        elif todo_source == "keep":
+            raw = self._get_keep_todos(keep_email, keep_token, keep_note_title,
+                                       show_completed, num_todo_items)
+            todos = [dict(t, source="keep") for t in raw]
         elif todo_source == "tasks":
-            todos = self._get_google_tasks(tasks_api_key, tasks_list_id,
-                                           show_completed, num_todo_items)
+            raw = self._get_google_tasks(tasks_api_key, tasks_list_id,
+                                         show_completed, num_todo_items)
+            todos = [dict(t, source="tasks") for t in raw]
         elif todo_source == "ical":
-            # Use first feed for todos
             try:
                 first_cal = self._fetch_ical(ical_feeds[0]["url"])
-                todos = self._get_ical_todos(first_cal, show_completed, num_todo_items)
+                raw = self._get_ical_todos(first_cal, show_completed, num_todo_items)
+                todos = [dict(t, source="ical") for t in raw]
             except Exception:
                 todos = []
         else:
             todos = [
-                {"summary": t.strip(), "completed": False}
+                {"summary": t.strip(), "completed": False, "source": "manual"}
                 for t in manual_todos.splitlines() if t.strip()
             ][:num_todo_items]
 
@@ -281,10 +295,75 @@ class CalendarTodoPlugin(BasePlugin):
                 completed = str(c.get("STATUS", "")).upper() == "COMPLETED"
                 if completed and not show_completed:
                     continue
-                todos.append({"summary": str(c.get("SUMMARY", "")), "completed": completed})
+                # Extract due date/time if present
+                due_str  = ""
+                due_sort = ""
+                due_raw  = c.get("DUE")
+                if due_raw:
+                    dt = due_raw.dt
+                    if isinstance(dt, datetime):
+                        due_str  = dt.strftime("%d.%m %H:%M")
+                        due_sort = dt.strftime("%Y%m%d%H%M")
+                    elif isinstance(dt, date):
+                        due_str  = dt.strftime("%d.%m")
+                        due_sort = dt.strftime("%Y%m%d0000")
+                todos.append({
+                    "summary":   str(c.get("SUMMARY", "")),
+                    "completed": completed,
+                    "due_str":   due_str,
+                    "due_sort":  due_sort,
+                    "source":    "ical",
+                })
                 if len(todos) >= limit:
                     break
         return todos
+
+    def _get_combined_todos(self, keep_email, keep_token, keep_note_title,
+                            ical_feeds, show_completed, limit, settings):
+        """
+        Merge Google Keep checklist items + iCal VTODOs into one list.
+        iCal tasks with a due date are sorted by due date first, then Keep items.
+        Items from each source keep their colour identity for pill rendering.
+        """
+        combined = []
+
+        # --- Keep items ---
+        try:
+            keep_raw = self._get_keep_todos(keep_email, keep_token, keep_note_title,
+                                            show_completed, limit)
+            for item in keep_raw:
+                combined.append({
+                    "summary":   item["summary"],
+                    "completed": item["completed"],
+                    "due_str":   "",
+                    "due_sort":  "z",       # sorts after dated iCal items
+                    "source":    "keep",
+                })
+        except Exception as e:
+            logger.warning(f"Combined todo: Keep fetch failed: {e}")
+
+        # --- iCal VTODOs (from all feeds) ---
+        seen_urls = set()
+        for feed in ical_feeds:
+            url = feed["url"]
+            if url in seen_urls:
+                continue
+            seen_urls.add(url)
+            try:
+                cal = self._fetch_ical(url)
+                ical_raw = self._get_ical_todos(cal, show_completed, limit)
+                for item in ical_raw:
+                    combined.append(item)   # already has source="ical"
+            except Exception as e:
+                logger.warning(f"Combined todo: iCal fetch failed ({url}): {e}")
+
+        # Sort: dated iCal items first (by due_sort), then undated / Keep
+        combined.sort(key=lambda t: (t.get("due_sort") or "z", t["summary"]))
+
+        # Completed items go to the bottom
+        combined.sort(key=lambda t: t["completed"])
+
+        return combined[:limit]
 
     def _get_keep_todos(self, email, master_token, note_title, show_completed, limit):
         try:
@@ -585,12 +664,19 @@ class CalendarTodoPlugin(BasePlugin):
     def _render_todos(self, width, height, todos, font_size=14, language="en", colors=None):
         if colors is None:
             colors = {}
-        bg       = colors.get("todo_bg",          (255, 255, 255))
-        fg       = colors.get("todo_text",         (0,   0,   0  ))
-        pill_bdr = colors.get("todo_pill_border",  (251, 189,  2 ))
-        pill_fil = colors.get("todo_pill_fill",    (255, 242, 173))
-        hdr_bg   = colors.get("cal_header_bg",     (0,   0,   0  ))
-        hdr_fg   = colors.get("cal_header_text",   (255, 255, 255))
+        bg              = colors.get("todo_bg",               (255, 255, 255))
+        fg              = colors.get("todo_text",             (0,   0,   0  ))
+        hdr_bg          = colors.get("cal_header_bg",         (0,   0,   0  ))
+        hdr_fg          = colors.get("cal_header_text",       (255, 255, 255))
+
+        # Default pill colours (used when source is "manual", "tasks", or unknown)
+        default_bdr     = colors.get("todo_pill_border",      (251, 189,  2 ))
+        default_fil     = colors.get("todo_pill_fill",        (255, 242, 173))
+        # Per-source pill colours
+        keep_bdr        = colors.get("keep_pill_border",      (251, 189,  2 ))
+        keep_fil        = colors.get("keep_pill_fill",        (255, 242, 173))
+        ical_bdr        = colors.get("ical_todo_pill_border", (52,  168,  83))
+        ical_fil        = colors.get("ical_todo_pill_fill",   (212, 237, 218))
 
         img  = Image.new("RGB", (width, height), bg)
         draw = ImageDraw.Draw(img)
@@ -603,6 +689,7 @@ class CalendarTodoPlugin(BasePlugin):
         box_size  = max(10, font_size - 2)
         y         = padding
 
+        # Header bar
         hdr_h = font_size + 12
         draw.rectangle([0, y, width, y + hdr_h], fill=hdr_bg)
         draw.text((width // 2, y + hdr_h // 2), "To-do",
@@ -614,24 +701,50 @@ class CalendarTodoPlugin(BasePlugin):
             draw.text((padding, y), msg, font=small, fill=fg)
             return img
 
-        pill_h   = max(box_size + pill_pady * 2, font_size + pill_pady * 2)
-        item_gap = 4
-        tx       = padding + pill_padx + box_size + 6
+        # Pills with due dates are taller (two text lines)
+        pill_h_single = max(box_size + pill_pady * 2, font_size + pill_pady * 2)
+        pill_h_double = pill_h_single + tiny.size + 2
+        item_gap      = 4
+        tx            = padding + pill_padx + box_size + 6   # text start x
 
         for task in todos:
+            source    = task.get("source", "manual")
+            due_str   = task.get("due_str", "")
+            has_due   = bool(due_str)
+            pill_h    = pill_h_double if has_due else pill_h_single
+
             if y + pill_h > height - padding:
                 break
+
+            # Pill colours by source
+            if source == "keep":
+                p_bdr, p_fil = keep_bdr, keep_fil
+            elif source == "ical":
+                p_bdr, p_fil = ical_bdr, ical_fil
+            else:
+                p_bdr, p_fil = default_bdr, default_fil
 
             px0, py0 = padding, y
             px1, py1 = width - padding, y + pill_h
 
             self._draw_rounded_rect(draw, px0, py0, px1, py1,
-                                    radius=pill_r, fill=pill_fil)
+                                    radius=pill_r, fill=p_fil)
             draw.rounded_rectangle([px0, py0, px1, py1],
-                                   radius=pill_r, outline=pill_bdr, width=2)
+                                   radius=pill_r, outline=p_bdr, width=2)
 
+            # Source tag badge (tiny label at top-right of pill)
+            tag_label = {"keep": "Keep", "ical": "Cal", "tasks": "Tasks"}.get(source, "")
+            if tag_label:
+                tag_w = int(draw.textlength(tag_label, font=tiny)) + 6
+                tag_x = px1 - tag_w - 2
+                tag_y = py0 + 2
+                draw.rounded_rectangle([tag_x, tag_y, px1 - 2, tag_y + tiny.size + 2],
+                                       radius=2, fill=p_bdr)
+                draw.text((tag_x + 3, tag_y + 1), tag_label, font=tiny, fill=bg)
+
+            # Checkbox
             bx = px0 + pill_padx
-            by = py0 + (pill_h - box_size) // 2
+            by = py0 + (pill_h_single - box_size) // 2   # align to top line
             draw.rectangle([bx, by, bx+box_size, by+box_size], outline=fg, width=1)
             if task["completed"]:
                 draw.rectangle([bx, by, bx+box_size, by+box_size], fill=fg)
@@ -639,14 +752,28 @@ class CalendarTodoPlugin(BasePlugin):
                 draw.line([(bx+2, cy), (cx-1, by+box_size-3), (bx+box_size-2, by+2)],
                           fill=bg, width=max(1, box_size // 6))
 
-            text_color = (128, 128, 128) if task["completed"] else fg
-            label = self._truncate(draw, task["summary"], small, px1 - tx - pill_padx)
-            draw.text((tx, py0 + pill_h // 2), label, font=small,
-                      fill=text_color, anchor="lm")
+            text_color = (140, 140, 140) if task["completed"] else fg
+
+            # Summary text — truncate to avoid tag badge
+            max_w = (tag_x if tag_label else px1) - tx - pill_padx - 4
+            label = self._truncate(draw, task["summary"], small, max_w)
+
+            if has_due:
+                # Two-line layout: summary top, due date bottom
+                text_top = py0 + pill_pady + 1
+                draw.text((tx, text_top), label, font=small, fill=text_color)
+                due_y = text_top + small.size + 2
+                draw.text((tx, due_y), "📅 " + due_str if False else "⏰ " + due_str,
+                          font=tiny, fill=text_color)
+                # plain version without emoji for e-ink compatibility:
+                draw.text((tx, due_y), due_str, font=tiny, fill=p_bdr)
+            else:
+                draw.text((tx, py0 + pill_h // 2), label, font=small,
+                          fill=text_color, anchor="lm")
 
             if task["completed"]:
                 tw    = draw.textlength(label, font=small)
-                mid_y = py0 + pill_h // 2
+                mid_y = (py0 + pill_pady + small.size // 2) if has_due else (py0 + pill_h // 2)
                 draw.line([(tx, mid_y), (tx+tw, mid_y)], fill=text_color, width=1)
 
             y += pill_h + item_gap

@@ -131,6 +131,34 @@
         </div>
     </div>
     <div class="col-6 col-md-3">
+        <label class="form-label small fw-semibold">Keep pill border <small class="text-muted">(combined)</small></label>
+        <div class="d-flex align-items-center gap-2">
+            <input type="color" class="form-control form-control-color" id="keep_pill_border" name="keep_pill_border" value="#FBBD02">
+            <input type="text"  class="form-control form-control-sm font-monospace" id="keep_pill_border_hex" maxlength="7" value="#FBBD02" oninput="syncFromHex('keep_pill_border')">
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <label class="form-label small fw-semibold">Keep pill fill <small class="text-muted">(combined)</small></label>
+        <div class="d-flex align-items-center gap-2">
+            <input type="color" class="form-control form-control-color" id="keep_pill_fill" name="keep_pill_fill" value="#FFF2AD">
+            <input type="text"  class="form-control form-control-sm font-monospace" id="keep_pill_fill_hex" maxlength="7" value="#FFF2AD" oninput="syncFromHex('keep_pill_fill')">
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <label class="form-label small fw-semibold">iCal task pill border <small class="text-muted">(combined)</small></label>
+        <div class="d-flex align-items-center gap-2">
+            <input type="color" class="form-control form-control-color" id="ical_todo_pill_border" name="ical_todo_pill_border" value="#34A853">
+            <input type="text"  class="form-control form-control-sm font-monospace" id="ical_todo_pill_border_hex" maxlength="7" value="#34A853" oninput="syncFromHex('ical_todo_pill_border')">
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <label class="form-label small fw-semibold">iCal task pill fill <small class="text-muted">(combined)</small></label>
+        <div class="d-flex align-items-center gap-2">
+            <input type="color" class="form-control form-control-color" id="ical_todo_pill_fill" name="ical_todo_pill_fill" value="#D4EDDA">
+            <input type="text"  class="form-control form-control-sm font-monospace" id="ical_todo_pill_fill_hex" maxlength="7" value="#D4EDDA" oninput="syncFromHex('ical_todo_pill_fill')">
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
         <label class="form-label small fw-semibold">Divider line</label>
         <div class="d-flex align-items-center gap-2">
             <input type="color" class="form-control form-control-color" id="divider_color" name="divider_color" value="#000000">
@@ -157,6 +185,7 @@
     <select class="form-select" id="todo_source" name="todo_source">
         <option value="ical">From same iCal (VTODO — first feed)</option>
         <option value="keep">Google Keep (gkeepapi)</option>
+        <option value="combined">Combined: Keep + iCal VTODOs (different colours)</option>
         <option value="tasks">Google Tasks API</option>
         <option value="manual">Manual list</option>
     </select>
@@ -235,7 +264,10 @@ var PRESETS = {
 };
 
 var COLOR_FIELDS = ['cal_bg','cal_text','cal_header_bg','cal_header_text',
-                    'todo_bg','todo_text','todo_pill_border','todo_pill_fill','divider_color'];
+                    'todo_bg','todo_text','todo_pill_border','todo_pill_fill',
+                    'keep_pill_border','keep_pill_fill',
+                    'ical_todo_pill_border','ical_todo_pill_fill',
+                    'divider_color'];
 
 function setColor(id, hex) {
     var p = document.getElementById(id);
@@ -379,7 +411,10 @@ document.addEventListener('DOMContentLoaded', function() {
         /* Colours */
         var colorDefaults = {cal_bg:'#FFFFFF',cal_text:'#000000',cal_header_bg:'#000000',
             cal_header_text:'#FFFFFF',todo_bg:'#FFFFFF',todo_text:'#000000',
-            todo_pill_border:'#FBBD02',todo_pill_fill:'#FFF2AD',divider_color:'#000000'};
+            todo_pill_border:'#FBBD02',todo_pill_fill:'#FFF2AD',
+            keep_pill_border:'#FBBD02',keep_pill_fill:'#FFF2AD',
+            ical_todo_pill_border:'#34A853',ical_todo_pill_fill:'#D4EDDA',
+            divider_color:'#000000'};
         COLOR_FIELDS.forEach(function(id) {
             setColor(id, pluginSettings[id] || colorDefaults[id]);
         });
