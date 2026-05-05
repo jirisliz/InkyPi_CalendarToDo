@@ -104,7 +104,14 @@ class CalendarTodoPlugin(BasePlugin):
             keep_pill_border=keep_pill_bdr,     keep_pill_fill=keep_pill_fil,
             ical_todo_pill_border=ical_todo_pill_bdr, ical_todo_pill_fill=ical_todo_pill_fil,
             divider_color=divider_color,
+            # debug flags for empty-state display
+            _dbg_use_ical=settings.get("use_ical","") in (True,"true","True","1",1),
+            _dbg_use_keep=settings.get("use_keep","") in (True,"true","True","1",1),
+            _dbg_use_tasks=settings.get("use_tasks","") in (True,"true","True","1",1),
+            _dbg_use_manual=settings.get("use_manual","") in (True,"true","True","1",1),
         )
+        # Log all settings keys so we can diagnose checkbox values
+        logger.info(f"[calendar_todo] Settings keys: { {k: v for k, v in settings.items() if 'use_' in k or k in ('keep_email','keep_token','keep_note_title')} }")
 
         today = date.today()
 
@@ -120,18 +127,28 @@ class CalendarTodoPlugin(BasePlugin):
 
         # --- Todos: each source has an independent "use_*" checkbox ---
         def _checked(key):
-            v = settings.get(key, "false")
-            return v in (True, "true", "True", "1")
+            # Checkboxes send value="true" when checked; absent/empty when unchecked.
+            # InkyPi may store the raw form value or a bool.
+            v = settings.get(key, "")
+            logger.info(f"[calendar_todo] _checked({key!r}) = {v!r}")
+            return v in (True, "true", "True", "1", 1)
 
         combined = []
 
         if _checked("use_ical"):
-            try:
-                first_cal = self._fetch_ical(ical_feeds[0]["url"])
-                for t in self._get_ical_todos(first_cal, show_completed, num_todo_items):
-                    combined.append(dict(t, source="ical"))
-            except Exception as e:
-                logger.warning(f"iCal todo fetch failed: {e}")
+            seen_ical = set()
+            for feed in ical_feeds:
+                url = feed["url"]
+                if url in seen_ical:
+                    continue
+                seen_ical.add(url)
+                try:
+                    feed_cal = self._fetch_ical(url)
+                    for t in self._get_ical_todos(feed_cal, show_completed, num_todo_items):
+                        combined.append(dict(t, source="ical"))
+                    logger.info(f"[calendar_todo] iCal todos from {url}: {len(combined)} so far")
+                except Exception as e:
+                    logger.warning(f"iCal todo fetch failed ({url}): {e}")
 
         if _checked("use_keep"):
             try:
@@ -170,6 +187,8 @@ class CalendarTodoPlugin(BasePlugin):
                                      t.get("due_sort") or "z",
                                      t["summary"]))
         todos = combined[:num_todo_items]
+        logger.info(f"[calendar_todo] Final todo list ({len(todos)} items): "
+                    f"{[t['summary'] for t in todos]}")
 
         # Render
         if cal_style == "agenda":
@@ -355,19 +374,23 @@ class CalendarTodoPlugin(BasePlugin):
         except Exception as e:
             raise RuntimeError(f"Google Keep auth failed: {e}")
         keep.sync()
+        all_notes = list(keep.all())
+        logger.info(f"[calendar_todo] Keep synced, {len(all_notes)} notes found")
         note = None
         if note_title:
-            for n in keep.all():
+            for n in all_notes:
+                logger.info(f"[calendar_todo] Keep note: title={n.title!r} trashed={n.trashed} pinned={n.pinned}")
                 if not n.trashed and n.title.lower() == note_title.lower():
                     note = n
                     break
         if note is None:
-            for n in keep.all():
+            for n in all_notes:
                 if not n.trashed and n.pinned and hasattr(n, "items"):
                     note = n
                     break
+        logger.info(f"[calendar_todo] Keep note selected: {note.title if note else None}")
         if note is None:
-            return [{"summary": "No Keep note found", "completed": False}]
+            return [{"summary": "No Keep note found", "completed": False, "due_str": "", "due_sort": "z"}]
         todos = []
         if hasattr(note, "items"):
             for item in note.items:
@@ -676,6 +699,13 @@ class CalendarTodoPlugin(BasePlugin):
         if not todos:
             msg = "Vše hotovo!" if language == "cs" else "All done!"
             draw.text((padding, y), msg, font=small, fill=fg)
+            y += small.size + 6
+            # Show which sources were checked (helps diagnose config issues)
+            enabled = [k for k in ("use_ical","use_keep","use_tasks","use_manual")
+                       if colors.get("_dbg_" + k)]
+            if enabled:
+                draw.text((padding, y), "Enabled: " + ", ".join(enabled),
+                          font=tiny, fill=fg)
             return img
 
         # Pills with due dates are taller (two text lines)
