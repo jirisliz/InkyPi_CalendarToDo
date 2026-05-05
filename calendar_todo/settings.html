@@ -182,17 +182,6 @@
 <h6 class="mb-1">Todo sources</h6>
 <small class="text-muted d-block mb-3">Enable any combination. All checked sources are merged into one list.</small>
 
-<!-- iCal VTODOs -->
-<div class="border rounded p-3 mb-2">
-    <div class="form-check mb-2">
-        <input class="form-check-input source-toggle" type="checkbox" id="use_ical" name="use_ical" value="true" data-target="ical_fields">
-        <label class="form-check-label fw-semibold" for="use_ical">iCal tasks (VTODO from first calendar feed)</label>
-    </div>
-    <div id="ical_fields" style="display:none">
-        <small class="text-muted">Uses the first iCal URL defined in the Calendar feeds section above. No extra config needed.</small>
-    </div>
-</div>
-
 <!-- Google Keep -->
 <div class="border rounded p-3 mb-2">
     <div class="form-check mb-2">
@@ -221,17 +210,36 @@
 <div class="border rounded p-3 mb-2">
     <div class="form-check mb-2">
         <input class="form-check-input source-toggle" type="checkbox" id="use_tasks" name="use_tasks" value="true" data-target="tasks_fields">
-        <label class="form-check-label fw-semibold" for="use_tasks">Google Tasks API</label>
+        <label class="form-check-label fw-semibold" for="use_tasks">Google Tasks</label>
     </div>
     <div id="tasks_fields" style="display:none">
-        <div class="mb-2">
-            <label class="form-label">OAuth2 Bearer Token</label>
-            <input type="password" class="form-control" id="tasks_api_key" name="tasks_api_key">
-            <small class="text-muted">Or set <code>GOOGLE_TASKS_TOKEN</code> in your InkyPi <code>.env</code>.</small>
+        <small class="text-muted d-block mb-2">
+            One-time setup: enable Tasks API in Google Cloud Console, create an OAuth2 Desktop app credential,
+            then run <code>python3 get_refresh_token.py</code> (included in the plugin folder) to get your tokens.
+            <a href="https://github.com/jirisliz/InkyPi_CalendarToDo#google-tasks-setup" target="_blank">Full instructions →</a>
+        </small>
+        <div class="row g-2 mb-2">
+            <div class="col-md-6">
+                <label class="form-label">Client ID</label>
+                <input type="text" class="form-control" id="tasks_client_id" name="tasks_client_id"
+                       placeholder="123456789.apps.googleusercontent.com">
+            </div>
+            <div class="col-md-6">
+                <label class="form-label">Client Secret</label>
+                <input type="password" class="form-control" id="tasks_client_secret" name="tasks_client_secret"
+                       placeholder="GOCSPX-...">
+            </div>
         </div>
         <div class="mb-2">
-            <label class="form-label">Task list ID</label>
-            <input type="text" class="form-control" id="tasks_list_id" name="tasks_list_id" placeholder="@default">
+            <label class="form-label">Refresh Token</label>
+            <input type="password" class="form-control" id="tasks_refresh_token" name="tasks_refresh_token"
+                   placeholder="1//0g...">
+        </div>
+        <div class="mb-2">
+            <label class="form-label">Task list name</label>
+            <input type="text" class="form-control" id="tasks_list_name" name="tasks_list_name"
+                   placeholder="My Tasks">
+            <small class="text-muted">Exact name of the list (e.g. <em>My Tasks</em>). Leave blank for default list.</small>
         </div>
     </div>
 </div>
@@ -413,8 +421,14 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('keep_email').value      = pluginSettings.keep_email      || '';
         document.getElementById('keep_token').value      = pluginSettings.keep_token      || '';
         document.getElementById('keep_note_title').value = pluginSettings.keep_note_title || '';
-        document.getElementById('tasks_api_key').value   = pluginSettings.tasks_api_key   || '';
-        document.getElementById('tasks_list_id').value   = pluginSettings.tasks_list_id   || '@default';
+        if (document.getElementById('tasks_client_id'))
+            document.getElementById('tasks_client_id').value     = pluginSettings.tasks_client_id     || '';
+        if (document.getElementById('tasks_client_secret'))
+            document.getElementById('tasks_client_secret').value = pluginSettings.tasks_client_secret || '';
+        if (document.getElementById('tasks_refresh_token'))
+            document.getElementById('tasks_refresh_token').value = pluginSettings.tasks_refresh_token || '';
+        if (document.getElementById('tasks_list_name'))
+            document.getElementById('tasks_list_name').value     = pluginSettings.tasks_list_name     || '';
         document.getElementById('manual_todos').value    = pluginSettings.manual_todos    || '';
         document.getElementById('agenda_days').value     = pluginSettings.agenda_days     || '14';
 
@@ -431,7 +445,7 @@ document.addEventListener('DOMContentLoaded', function() {
         /* Checkboxes */
         if (pluginSettings.show_completed === 'true' || pluginSettings.show_completed === true)
             document.getElementById('show_completed').checked = true;
-        ['use_ical','use_keep','use_tasks','use_manual'].forEach(function(id) {
+        ['use_keep','use_tasks','use_manual'].forEach(function(id) {
             var el = document.getElementById(id);
             if (el && (pluginSettings[id] === 'true' || pluginSettings[id] === true))
                 el.checked = true;
