@@ -64,8 +64,6 @@ class CalendarTodoPlugin(BasePlugin):
         keep_note_title = settings.get("keep_note_title", "").strip()
         keep_token      = settings.get("keep_token", "").strip()
         keep_email      = settings.get("keep_email", "").strip()
-        tasks_api_key   = settings.get("tasks_api_key", "").strip()
-        tasks_list_id   = settings.get("tasks_list_id", "@default")
         manual_todos    = settings.get("manual_todos", "")
         cal_style       = settings.get("cal_style", "grid")
         font_size       = int(settings.get("font_size", 14))
@@ -105,7 +103,6 @@ class CalendarTodoPlugin(BasePlugin):
             ical_todo_pill_border=ical_todo_pill_bdr, ical_todo_pill_fill=ical_todo_pill_fil,
             divider_color=divider_color,
             # debug flags for empty-state display
-            _dbg_use_ical=settings.get("use_ical","") in (True,"true","True","1",1),
             _dbg_use_keep=settings.get("use_keep","") in (True,"true","True","1",1),
             _dbg_use_tasks=settings.get("use_tasks","") in (True,"true","True","1",1),
             _dbg_use_manual=settings.get("use_manual","") in (True,"true","True","1",1),
@@ -135,21 +132,6 @@ class CalendarTodoPlugin(BasePlugin):
 
         combined = []
 
-        if _checked("use_ical"):
-            seen_ical = set()
-            for feed in ical_feeds:
-                url = feed["url"]
-                if url in seen_ical:
-                    continue
-                seen_ical.add(url)
-                try:
-                    feed_cal = self._fetch_ical(url)
-                    for t in self._get_ical_todos(feed_cal, show_completed, num_todo_items):
-                        combined.append(dict(t, source="ical"))
-                    logger.info(f"[calendar_todo] iCal todos from {url}: {len(combined)} so far")
-                except Exception as e:
-                    logger.warning(f"iCal todo fetch failed ({url}): {e}")
-
         if _checked("use_keep"):
             try:
                 for t in self._get_keep_todos(keep_email, keep_token, keep_note_title,
@@ -161,10 +143,15 @@ class CalendarTodoPlugin(BasePlugin):
 
         if _checked("use_tasks"):
             try:
-                for t in self._get_google_tasks(tasks_api_key, tasks_list_id,
-                                                show_completed, num_todo_items):
-                    combined.append(dict(t, source="tasks",
-                                        due_str="", due_sort="z"))
+                tasks_client_id     = settings.get("tasks_client_id",     "").strip()
+                tasks_client_secret = settings.get("tasks_client_secret", "").strip()
+                tasks_refresh_token = settings.get("tasks_refresh_token", "").strip()
+                tasks_list_name     = settings.get("tasks_list_name",     "").strip()
+                for t in self._get_google_tasks(
+                        tasks_client_id, tasks_client_secret,
+                        tasks_refresh_token, tasks_list_name,
+                        show_completed, num_todo_items):
+                    combined.append(dict(t, source="tasks"))
             except Exception as e:
                 logger.warning(f"Google Tasks fetch failed: {e}")
 
@@ -176,7 +163,7 @@ class CalendarTodoPlugin(BasePlugin):
                                      "source": "manual", "due_str": "", "due_sort": "z"})
 
         # If no source is enabled fall back to a helpful message
-        if not any(_checked(k) for k in ("use_ical","use_keep","use_tasks","use_manual")):
+        if not any(_checked(k) for k in ("use_keep","use_tasks","use_manual")):
             combined = [{"summary": "No todo source enabled" if language == "en"
                          else "Zadejte zdroj úkolů",
                          "completed": False, "source": "manual",
@@ -331,106 +318,219 @@ class CalendarTodoPlugin(BasePlugin):
     #  Todo data helpers                                                   #
     # ------------------------------------------------------------------ #
 
-    def _get_ical_todos(self, cal, show_completed, limit):
-        todos = []
-        for c in cal.walk():
-            if c.name == "VTODO":
-                completed = str(c.get("STATUS", "")).upper() == "COMPLETED"
-                if completed and not show_completed:
-                    continue
-                # Extract due date/time if present
-                due_str  = ""
-                due_sort = ""
-                due_raw  = c.get("DUE")
-                if due_raw:
-                    dt = due_raw.dt
-                    if isinstance(dt, datetime):
-                        due_str  = dt.strftime("%d.%m %H:%M")
-                        due_sort = dt.strftime("%Y%m%d%H%M")
-                    elif isinstance(dt, date):
-                        due_str  = dt.strftime("%d.%m")
-                        due_sort = dt.strftime("%Y%m%d0000")
-                todos.append({
-                    "summary":   str(c.get("SUMMARY", "")),
-                    "completed": completed,
-                    "due_str":   due_str,
-                    "due_sort":  due_sort,
-                    "source":    "ical",
-                })
-                if len(todos) >= limit:
-                    break
-        return todos
-
     def _get_keep_todos(self, email, master_token, note_title, show_completed, limit):
+        """
+        Authenticate to Google Keep and fetch a checklist note.
+
+        Authentication options (try in order):
+          1. master_token starts with "aas_et/" or "oauth2_4/" → use as master token
+             (obtain via gpsoauth or gkeepapi CLI)
+          2. Anything else → treat as a Google App Password and use login()
+             (Google Account → Security → App Passwords → generate one)
+
+        If you keep getting BadAuthentication:
+          - Go to https://myaccount.google.com/apppasswords
+          - Create an App Password (select "Other" → name it "InkyPi")
+          - Paste the 16-character code (without spaces) as the master token
+        """
         try:
             import gkeepapi
         except ImportError:
             raise RuntimeError("gkeepapi not installed. Run: pip install gkeepapi")
+
         if not email or not master_token:
             raise RuntimeError("Google Keep requires email and master token in settings.")
+
         keep = gkeepapi.Keep()
-        try:
-            keep.authenticate(email, master_token)
-        except Exception as e:
-            raise RuntimeError(f"Google Keep auth failed: {e}")
+        authenticated = False
+
+        # Method 1: treat as master token if it looks like one
+        token = master_token.strip().replace(" ", "")
+        if token.startswith("aas_et/") or token.startswith("oauth2_4/"):
+            try:
+                keep.authenticate(email, token)
+                authenticated = True
+                logger.info("[calendar_todo] Keep auth via master token OK")
+            except Exception as e:
+                logger.warning(f"[calendar_todo] Keep master token auth failed: {e}")
+
+        # Method 2: treat as App Password — use login()
+        if not authenticated:
+            try:
+                keep.login(email, token)
+                authenticated = True
+                logger.info("[calendar_todo] Keep auth via App Password (login) OK")
+            except Exception as e:
+                logger.warning(f"[calendar_todo] Keep login() failed: {e}")
+
+        if not authenticated:
+            raise RuntimeError(
+                "Google Keep authentication failed. "
+                "Please use a Google App Password: "
+                "Google Account → Security → App Passwords → create one for 'InkyPi'. "
+                "Paste the 16-character code (no spaces) as the Master token."
+            )
+
         keep.sync()
         all_notes = list(keep.all())
-        logger.info(f"[calendar_todo] Keep synced, {len(all_notes)} notes found")
+        logger.info(f"[calendar_todo] Keep synced: {len(all_notes)} notes")
+
         note = None
         if note_title:
+            target = note_title.strip().lower()
             for n in all_notes:
-                logger.info(f"[calendar_todo] Keep note: title={n.title!r} trashed={n.trashed} pinned={n.pinned}")
-                if not n.trashed and n.title.lower() == note_title.lower():
+                logger.info(f"[calendar_todo] Keep note: {n.title!r} pinned={n.pinned} trashed={n.trashed}")
+                if not n.trashed and n.title.strip().lower() == target:
                     note = n
                     break
+
         if note is None:
+            # Fall back to first pinned checklist
             for n in all_notes:
                 if not n.trashed and n.pinned and hasattr(n, "items"):
                     note = n
                     break
-        logger.info(f"[calendar_todo] Keep note selected: {note.title if note else None}")
+
         if note is None:
-            return [{"summary": "No Keep note found", "completed": False, "due_str": "", "due_sort": "z"}]
+            # Last resort: first non-trashed checklist
+            for n in all_notes:
+                if not n.trashed and hasattr(n, "items"):
+                    note = n
+                    break
+
+        logger.info("[calendar_todo] Keep note selected: " + (repr(note.title) if note else "None"))
+
+        if note is None:
+            return [{"summary": "No Keep checklist found", "completed": False,
+                     "due_str": "", "due_sort": "z"}]
+
         todos = []
         if hasattr(note, "items"):
             for item in note.items:
                 if item.checked and not show_completed:
                     continue
-                todos.append({"summary": item.text, "completed": item.checked})
+                todos.append({"summary": item.text, "completed": item.checked,
+                              "due_str": "", "due_sort": "z"})
                 if len(todos) >= limit:
                     break
         else:
             for line in note.text.splitlines():
                 line = line.strip()
                 if line:
-                    todos.append({"summary": line, "completed": False})
+                    todos.append({"summary": line, "completed": False,
+                                  "due_str": "", "due_sort": "z"})
                     if len(todos) >= limit:
                         break
+
+        logger.info(f"[calendar_todo] Keep items fetched: {len(todos)}")
         return todos
 
-    def _get_google_tasks(self, api_key, tasklist_id, show_completed, limit):
-        token = os.environ.get("GOOGLE_TASKS_TOKEN", api_key)
-        if not token:
-            raise RuntimeError("Google Tasks token not set. Add GOOGLE_TASKS_TOKEN to .env")
-        url = (
-            f"https://tasks.googleapis.com/tasks/v1/lists/{tasklist_id}/tasks"
-            f"?showCompleted={'true' if show_completed else 'false'}"
-            f"&showHidden=false&maxResults={limit}"
-        )
+    def _get_oauth_token(self, client_id, client_secret, refresh_token):
+        """Exchange refresh_token for a fresh access token."""
         try:
-            resp = requests.get(url, headers={"Authorization": f"Bearer {token}"}, timeout=10)
+            resp = requests.post(
+                "https://oauth2.googleapis.com/token",
+                data={
+                    "client_id":     client_id,
+                    "client_secret": client_secret,
+                    "refresh_token": refresh_token,
+                    "grant_type":    "refresh_token",
+                },
+                timeout=10,
+            )
             resp.raise_for_status()
-            data = resp.json()
+            token = resp.json().get("access_token", "")
+            if not token:
+                raise RuntimeError("No access_token in response")
+            return token
         except Exception as e:
-            raise RuntimeError(f"Google Tasks API error: {e}")
-        return [
-            {"summary": item.get("title", ""), "completed": item.get("status") == "completed"}
-            for item in data.get("items", [])
-        ]
+            raise RuntimeError(f"OAuth2 token refresh failed: {e}")
 
-    # ------------------------------------------------------------------ #
-    #  Shared rendering helpers                                            #
-    # ------------------------------------------------------------------ #
+    def _tasks_api(self, url, access_token, params=None):
+        """Authenticated GET to Tasks API."""
+        try:
+            resp = requests.get(
+                url,
+                headers={"Authorization": f"Bearer {access_token}"},
+                params=params or {},
+                timeout=10,
+            )
+            resp.raise_for_status()
+            return resp.json()
+        except Exception as e:
+            raise RuntimeError(f"Tasks API error ({url}): {e}")
+
+    def _get_google_tasks(self, client_id, client_secret, refresh_token,
+                          tasklist_name, show_completed, limit):
+        """
+        Fetch tasks from Google Tasks API using OAuth2 refresh token.
+
+        One-time setup:
+          1. Google Cloud Console -> create project -> enable Tasks API
+          2. Credentials -> OAuth 2.0 Client ID (Desktop app) -> download JSON
+          3. Run: python3 get_refresh_token.py  (included in plugin folder)
+          4. Paste client_id, client_secret, refresh_token into settings.
+
+        tasklist_name: exact name of the task list, e.g. "My Tasks".
+                       Leave blank for the default (@default) list.
+        """
+        if not client_id or not client_secret or not refresh_token:
+            raise RuntimeError(
+                "Google Tasks requires client_id, client_secret and refresh_token. "
+                "Run get_refresh_token.py to obtain them — see README."
+            )
+
+        access_token = self._get_oauth_token(client_id, client_secret, refresh_token)
+        logger.info("[calendar_todo] Google Tasks access token OK")
+
+        # Resolve task list name -> ID
+        tasklist_id = "@default"
+        name = (tasklist_name or "").strip()
+        if name and name != "@default":
+            lists = self._tasks_api(
+                "https://tasks.googleapis.com/tasks/v1/users/@me/lists",
+                access_token,
+            )
+            for lst in lists.get("items", []):
+                logger.info("[calendar_todo] Task list: " + repr(lst.get("title")))
+                if lst.get("title", "").lower() == name.lower():
+                    tasklist_id = lst["id"]
+                    break
+            if tasklist_id == "@default":
+                logger.warning("[calendar_todo] Task list not found: " + repr(name))
+
+        data = self._tasks_api(
+            f"https://tasks.googleapis.com/tasks/v1/lists/{tasklist_id}/tasks",
+            access_token,
+            params={
+                "showCompleted": "true" if show_completed else "false",
+                "showHidden":    "false",
+                "maxResults":    str(limit),
+            },
+        )
+
+        todos = []
+        for item in data.get("items", []):
+            completed = item.get("status") == "completed"
+            due_str  = ""
+            due_sort = ""
+            due_raw  = item.get("due", "")
+            if due_raw:
+                try:
+                    dt = datetime.strptime(due_raw[:10], "%Y-%m-%d").date()
+                    due_str  = dt.strftime("%d.%m")
+                    due_sort = dt.strftime("%Y%m%d0000")
+                except Exception:
+                    pass
+            todos.append({
+                "summary":   item.get("title", ""),
+                "completed": completed,
+                "due_str":   due_str,
+                "due_sort":  due_sort,
+            })
+
+        logger.info(f"[calendar_todo] Google Tasks: {len(todos)} items from {tasklist_id!r}")
+        return todos
 
     def _load_fonts(self, base_size=14):
         font_dir = os.path.join(os.path.dirname(__file__), "..", "base_plugin", "fonts")
@@ -701,7 +801,7 @@ class CalendarTodoPlugin(BasePlugin):
             draw.text((padding, y), msg, font=small, fill=fg)
             y += small.size + 6
             # Show which sources were checked (helps diagnose config issues)
-            enabled = [k for k in ("use_ical","use_keep","use_tasks","use_manual")
+            enabled = [k for k in ("use_keep","use_tasks","use_manual")
                        if colors.get("_dbg_" + k)]
             if enabled:
                 draw.text((padding, y), "Enabled: " + ", ".join(enabled),
